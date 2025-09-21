@@ -422,4 +422,4 @@ class MonarchAttention(nn.Module):
         out = torch.einsum('bhafjik,bhafkjl->bhafijkl', L, R)
         out = rearrange(out, 'b h a f i j k l -> b h (a i j) (f k l)')
         out = torch.softmax(out * self.softmax_scale, dim=-1)
-        return torch.einsum('bhsl,blhd->bshd', out, v)
+        return torch.einsum('bhsl,blhd->bshd', out, v), None
