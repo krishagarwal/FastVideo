@@ -24,10 +24,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 64
+  --num_gpus 8
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 64
+  --hsdp_replicate_dim 8
   --hsdp_shard_dim 1
 )
 
@@ -72,7 +72,7 @@ miscellaneous_args=(
   --seed 1000
 )
 
-cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
+# cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
 export HF_HOME="/workspace"
 
 torchrun \
