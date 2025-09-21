@@ -91,6 +91,10 @@ spec:
                   export FI_PROVIDER=efa &&
                   export FI_EFA_ENABLE_SHM_TRANSFER=1 &&
                   export NCCL_IB_DISABLE=1  &&
+                  export NCCL_ASYNC_ERROR_HANDLING=1 &&
+                  export NCCL_BLOCKING_WAIT=1 &&
+                  export NCCL_DEBUG=INFO &&
+                  export NCCL_DEBUG_SUBSYS=INIT,NET,ENV &&
                   ulimit -l unlimited &&
                   unset NCCL_SOCKET_IFNAME &&
                   export OMP_NUM_THREADS=64 &&
