@@ -303,7 +303,7 @@ class MonarchAttention(nn.Module):
         self.to_rqv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqv")
 
     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
-        return _apply_rotary_emb(x.flatten(-2), cos, sin, is_neox_style=is_neox_style).unflatten(-1, (self.num_heads, self.head_size))
+        return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
     def get_block_sizes(self, seq_len):
         if not self.use_dynamic:
@@ -386,11 +386,11 @@ class MonarchAttention(nn.Module):
         lq = self.rot_emb_flat_unflat(lq, cos, sin, is_neox_style=False)
 
         lkq = lk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)[:, :, :, 0]
-        lkq = self.to_lkq(lkq)
+        lkq, _ = self.to_lkq(lkq)
         cos_k, sin_k = cos.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1)
-        lkq = self.rot_emb_flat_unflat(lkq, cos_k, sin_k, is_neox_style=False)
-        lkk = self.rot_emb_flat_unflat(self.to_lkk(lk), cos, sin, is_neox_style=False)
-        lkv = self.to_lkv(lk)
+        lkq = self.rot_emb_flat_unflat(lkq.view(batch_size, -1, self.num_heads, self.head_size), cos_k, sin_k, is_neox_style=False).view(batch_size, -1, block_b1, self.num_heads, self.head_size)
+        lkk = self.rot_emb_flat_unflat(self.to_lkk(lk)[0], cos, sin, is_neox_style=False)
+        lkv, _ = self.to_lkv(lk)
 
         lq = lq.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
         lkq = lkq.view(batch_size, -1, block_b1, self.num_heads, self.head_size)
@@ -404,11 +404,11 @@ class MonarchAttention(nn.Module):
         rk = self.rot_emb_flat_unflat(rk, cos, sin, is_neox_style=False)
 
         rqq = rq.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)[:, :, 0]
-        rqq = self.to_rqq(rqq)
-        cos_j, sin_j = cos.unflatten(0, (-1, block_b1, block_b2))[0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[0].flatten(0, 1)
-        rqq = self.rot_emb_flat_unflat(rqq, cos_j, sin_j, is_neox_style=False)
-        rqk = self.rot_emb_flat_unflat(self.to_rqk(rq), cos, sin, is_neox_style=False)
-        rqv = self.to_rqv(rq)
+        rqq, _ = self.to_rqq(rqq)
+        cos_j, sin_j = cos.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1)
+        rqq = self.rot_emb_flat_unflat(rqq.view(batch_size, -1, self.num_heads, self.head_size), cos_j, sin_j, is_neox_style=False).view(batch_size, -1, block_b2, self.num_heads, self.head_size)
+        rqk = self.rot_emb_flat_unflat(self.to_rqk(rq)[0], cos, sin, is_neox_style=False)
+        rqv, _ = self.to_rqv(rq)
 
         rk = rk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
         rqq = rqq.view(batch_size, -1, block_b2, self.num_heads, self.head_size)
