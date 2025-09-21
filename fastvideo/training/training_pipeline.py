@@ -645,11 +645,18 @@ class TrainingPipeline(LoRAPipeline, ABC):
             step_videos: list[np.ndarray] = []
             step_captions: list[str] = []
 
+            def print_mem():
+                free_memory_bytes, _ = torch.cuda.mem_get_info()
+                allocated_memory_bytes = torch.cuda.memory_allocated()
+                print(f"Rank {self.global_rank}, Free memory (GB): {free_memory_bytes / 1024**3:.2f}, Allocated memory (GB): {allocated_memory_bytes / 1024**3:.2f}, Reserved memory (GB): {torch.cuda.memory_reserved() / 1024**3:.2f}")
+
             for validation_batch in validation_dataloader:
+                print_mem()
                 batch = self._prepare_validation_batch(sampling_param,
                                                        training_args,
                                                        validation_batch,
                                                        num_inference_steps)
+                print_mem()
                 logger.info("rank: %s: rank_in_sp_group: %s, batch.prompt: %s",
                             self.global_rank,
                             self.rank_in_sp_group,
@@ -659,6 +666,8 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 assert batch.prompt is not None and isinstance(
                     batch.prompt, str)
                 step_captions.append(batch.prompt)
+
+                print_mem()
 
                 # Run validation inference
                 output_batch = self.validation_pipeline.forward(
