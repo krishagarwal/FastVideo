@@ -3,8 +3,8 @@ export FASTVIDEO_ATTENTION_BACKEND=MONARCH_ATTN
 
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
-DATA_DIR=your_data_dir
-VALIDATION_DATASET_FILE=your_validation_dataset_file
+DATA_DIR=/checkpoints-fsx/beidchen-sandbox/video/wan-syn/
+VALIDATION_DATASET_FILE=examples/distill/Wan2.1-T2V/Wan-Syn-Data-480P/validation_64.json
 
 # Training arguments
 training_args=(
