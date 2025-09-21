@@ -1,16 +1,16 @@
 #!/bin/bash
-export FASTVIDEO_ATTENTION_BACKEND=MONARCH_ATTN
+export FASTVIDEO_ATTENTION_BACKEND=VIDEO_SPARSE_ATTN
 
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
-DATA_DIR=/checkpoints-fsx/beidchen-sandbox/video/wan-syn/
+DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
 VALIDATION_DATASET_FILE=examples/distill/Wan2.1-T2V/Wan-Syn-Data-480P/validation_64.json
 
 # Training arguments
 training_args=(
   --tracker_project_name fastwan
-  --wandb_run_name wan_1.3b_t2v_monarch
-  --output_dir "checkpoints/wan_1.3b_t2v_finetune_monarch"
+  --wandb_run_name wan_1.3b_t2v_vsa_baseline
+  --output_dir "checkpoints/wan_1.3b_t2v_finetune_vsa"
   --max_train_steps 4000
   --train_batch_size 1
   --train_sp_batch_size 1
@@ -19,7 +19,7 @@ training_args=(
   --num_height 448
   --num_width 832
   --num_frames 77
-  # --enable_gradient_checkpointing_type "full" # if OOM enable this
+  --enable_gradient_checkpointing_type "full" # if OOM enable this
 )
 
 # Parallel arguments
@@ -72,14 +72,10 @@ miscellaneous_args=(
   --seed 1000
 )
 
-export HF_HOME="/checkpoints-fsx/beidchen-sandbox/video"
+export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
 
 torchrun \
---nnodes 2 \
---node_rank 1 \
---rdzv_backend=c10d \
 --nproc_per_node 8 \
---rdzv_endpoint="localhost:19040" \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \

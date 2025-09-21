@@ -4,7 +4,7 @@ export FASTVIDEO_MONARCH_USE_DYNAMIC=1
 
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
-DATA_DIR=/checkpoints-fsx/beidchen-sandbox/video/wan-syn/
+DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
 VALIDATION_DATASET_FILE=examples/distill/Wan2.1-T2V/Wan-Syn-Data-480P/validation_64.json
 
 # Training arguments
@@ -20,7 +20,7 @@ training_args=(
   --num_height 448
   --num_width 832
   --num_frames 77
-  # --enable_gradient_checkpointing_type "full" # if OOM enable this
+  --enable_gradient_checkpointing_type "full" # if OOM enable this
 )
 
 # Parallel arguments
@@ -72,6 +72,8 @@ miscellaneous_args=(
   --flow_shift 1
   --seed 1000
 )
+
+export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
 
 torchrun \
 --nproc_per_node 8 \
