@@ -24,10 +24,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 8
+  --num_gpus 16
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 8
+  --hsdp_replicate_dim 16
   --hsdp_shard_dim 1
 )
 
