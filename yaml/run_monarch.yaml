@@ -6,9 +6,9 @@ metadata:
 spec:
   elasticPolicy:
     rdzvBackend: c10d
-    minReplicas: 1 #<PLACEHOLDER> e.g. 16 #specify the same number in the env var below
-    maxReplicas: 1
-    maxRestarts: 1
+    minReplicas: 2 #<PLACEHOLDER> e.g. 16 #specify the same number in the env var below
+    maxReplicas: 2
+    maxRestarts: 2
     nProcPerNode: &gpus_per_node 8
     rdzvId: beidchen-train-fastwan-monarch-1
   runPolicy:
@@ -16,11 +16,11 @@ spec:
     schedulingPolicy:
       queue: default
       # priorityClass: {{ priority }} # low-priority # high-priority-preempt-lower high-priority-no-preempt default default-preempt-lower low-priority
-      minAvailable: 1 # don't schedule until required replicas are available
+      minAvailable: 2 # don't schedule until required replicas are available
       scheduleTimeoutSeconds: 172400 # 48 hours
   pytorchReplicaSpecs:
     Worker:
-      replicas: 1
+      replicas: 2
       restartPolicy: Never #OnFailure
       template:
         spec:

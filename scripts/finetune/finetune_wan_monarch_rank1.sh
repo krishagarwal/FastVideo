@@ -75,7 +75,11 @@ miscellaneous_args=(
 export HF_HOME="/checkpoints-fsx/beidchen-sandbox/video"
 
 torchrun \
+--nnodes 2 \
+--node_rank 1 \
+--rdzv_backend=c10d \
 --nproc_per_node 8 \
+--rdzv_endpoint="localhost:19040" \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \
