@@ -15,7 +15,7 @@ training_args=(
   --max_train_steps 4000
   --train_batch_size 1
   --train_sp_batch_size 1
-  --gradient_accumulation_steps 4
+  --gradient_accumulation_steps 1
   --num_latent_t 20
   --num_height 448
   --num_width 832
@@ -25,10 +25,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 16
+  --num_gpus 64
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 16
+  --hsdp_replicate_dim 64
   --hsdp_shard_dim 1
 )
 
@@ -55,7 +55,7 @@ validation_args=(
 
 # Optimizer arguments
 optimizer_args=(
-  --learning_rate 1e-5
+  --learning_rate 1e-6
   --mixed_precision "bf16"
   --checkpointing_steps 1000
   --weight_decay 0.01
