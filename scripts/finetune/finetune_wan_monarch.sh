@@ -76,7 +76,7 @@ miscellaneous_args=(
 export HF_HOME="/workspace"
 
 torchrun \
---nnodes 1 \
+--nnodes 2 \
 --nproc_per_node 8 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
