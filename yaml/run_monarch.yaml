@@ -34,7 +34,7 @@ spec:
                       - key: node.kubernetes.io/instance-type
                         operator: In
                         values:
-                          - p5.48xlarge
+                          - p5e.48xlarge
           tolerations:
             - key: sainyam-eval-team-only-p5e
               operator: Equal
