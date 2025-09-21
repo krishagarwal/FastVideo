@@ -9,7 +9,7 @@ import torch.nn as nn
 
 import fastvideo.envs as envs
 from fastvideo.attention import (DistributedAttention, DistributedAttention_VSA,
-                                 LocalAttention)
+                                 LocalAttention, MonarchAttention)
 from fastvideo.configs.models.dits import WanVideoConfig
 from fastvideo.configs.sample.wan import WanTeaCacheParams
 from fastvideo.distributed.parallel_state import get_sp_world_size
@@ -541,6 +541,173 @@ class WanTransformerBlock_VSA(nn.Module):
         return hidden_states
 
 
+class WanTransformerBlock_Monarch(nn.Module):
+
+    def __init__(self,
+                 dim: int,
+                 ffn_dim: int,
+                 num_heads: int,
+                 qk_norm: str = "rms_norm_across_heads",
+                 cross_attn_norm: bool = False,
+                 eps: float = 1e-6,
+                 added_kv_proj_dim: int | None = None,
+                 supported_attention_backends: tuple[AttentionBackendEnum, ...]
+                 | None = None,
+                 prefix: str = ""):
+        super().__init__()
+
+        dim_head = dim // num_heads
+
+        # 1. Self-attention
+        self.norm1 = FP32LayerNorm(dim, eps, elementwise_affine=False)
+        self.to_lq = ReplicatedLinear(dim, dim, bias=True)
+        self.to_lk = ReplicatedLinear(dim, dim, bias=True)
+        self.to_rq = ReplicatedLinear(dim, dim, bias=True)
+        self.to_rk = ReplicatedLinear(dim, dim, bias=True)
+        self.to_v = ReplicatedLinear(dim, dim, bias=True)
+
+        self.to_out = ReplicatedLinear(dim, dim, bias=True)
+        self.attn1 = MonarchAttention(
+            num_heads=num_heads,
+            head_size=dim // num_heads,
+            causal=False,
+            prefix=f"{prefix}.attn1")
+        self.hidden_dim = dim
+        self.num_attention_heads = num_heads
+        if qk_norm == "rms_norm":
+            self.norm_lq = RMSNorm(dim_head, eps=eps)
+            self.norm_lk = RMSNorm(dim_head, eps=eps)
+            self.norm_rq = RMSNorm(dim_head, eps=eps)
+            self.norm_rk = RMSNorm(dim_head, eps=eps)
+        elif qk_norm == "rms_norm_across_heads":
+            # LTX applies qk norm across all heads
+            self.norm_lq = RMSNorm(dim, eps=eps)
+            self.norm_lk = RMSNorm(dim, eps=eps)
+            self.norm_rq = RMSNorm(dim, eps=eps)
+            self.norm_rk = RMSNorm(dim, eps=eps)
+        else:
+            print("QK Norm type not supported")
+            raise Exception
+        assert cross_attn_norm is True
+        self.self_attn_residual_norm = ScaleResidualLayerNormScaleShift(
+            dim,
+            norm_type="layer",
+            eps=eps,
+            elementwise_affine=True,
+            dtype=torch.float32,
+            compute_dtype=torch.float32)
+
+        # 2. Cross-attention
+        if added_kv_proj_dim is not None:
+            # I2V
+            self.attn2 = WanI2VCrossAttention(dim,
+                                              num_heads,
+                                              qk_norm=qk_norm,
+                                              eps=eps)
+        else:
+            # T2V
+            self.attn2 = WanT2VCrossAttention(dim,
+                                              num_heads,
+                                              qk_norm=qk_norm,
+                                              eps=eps)
+        self.cross_attn_residual_norm = ScaleResidualLayerNormScaleShift(
+            dim,
+            norm_type="layer",
+            eps=eps,
+            elementwise_affine=False,
+            dtype=torch.float32,
+            compute_dtype=torch.float32)
+
+        # 3. Feed-forward
+        self.ffn = MLP(dim, ffn_dim, act_type="gelu_pytorch_tanh")
+        self.mlp_residual = ScaleResidual()
+
+        self.scale_shift_table = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        temb: torch.Tensor,
+        freqs_cis: tuple[torch.Tensor, torch.Tensor],
+    ) -> torch.Tensor:
+        if hidden_states.dim() == 4:
+            hidden_states = hidden_states.squeeze(1)
+        bs, seq_length, _ = hidden_states.shape
+        orig_dtype = hidden_states.dtype
+        # assert orig_dtype != torch.float32
+
+        if temb.dim() == 4:
+            # temb: batch_size, seq_len, 6, inner_dim (wan2.2 ti2v)
+            shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa = (
+                self.scale_shift_table.unsqueeze(0) + temb.float()
+            ).chunk(6, dim=2)
+            # batch_size, seq_len, 1, inner_dim
+            shift_msa = shift_msa.squeeze(2)
+            scale_msa = scale_msa.squeeze(2)
+            gate_msa = gate_msa.squeeze(2)
+            c_shift_msa = c_shift_msa.squeeze(2)
+            c_scale_msa = c_scale_msa.squeeze(2)
+            c_gate_msa = c_gate_msa.squeeze(2)
+        else:
+            # temb: batch_size, 6, inner_dim (wan2.1/wan2.2 14B)
+            e = self.scale_shift_table + temb.float()
+            shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa = e.chunk(
+                6, dim=1)
+        assert shift_msa.dtype == torch.float32
+
+        # 1. Self-attention
+        norm_hidden_states = (self.norm1(hidden_states.float()) *
+                              (1 + scale_msa) + shift_msa).to(orig_dtype)
+        
+        lq, _ = self.to_lq(norm_hidden_states)
+        lk, _ = self.to_lk(norm_hidden_states)
+        rq, _ = self.to_rq(norm_hidden_states)
+        rk, _ = self.to_rk(norm_hidden_states)
+        v, _ = self.to_v(norm_hidden_states)
+
+        if self.norm_lq is not None:
+            lq = self.norm_lq(lq)
+        if self.norm_lk is not None:
+            lk = self.norm_lk(lk)
+        if self.norm_rq is not None:
+            rq = self.norm_rq(rq)
+        if self.norm_rk is not None:
+            rk = self.norm_rk(rk)
+
+        lq = lq.squeeze(1).unflatten(2, (self.num_attention_heads, -1))
+        lk = lk.squeeze(1).unflatten(2, (self.num_attention_heads, -1))
+        rq = rq.squeeze(1).unflatten(2, (self.num_attention_heads, -1))
+        rk = rk.squeeze(1).unflatten(2, (self.num_attention_heads, -1))
+        v = v.squeeze(1).unflatten(2, (self.num_attention_heads, -1))
+
+        attn_output, _ = self.attn1(lq, lk, rq, rk, v, freqs_cis)
+        attn_output = attn_output.flatten(2)
+        attn_output, _ = self.to_out(attn_output)
+        attn_output = attn_output.squeeze(1)
+
+        null_shift = null_scale = torch.tensor([0], device=hidden_states.device)
+        norm_hidden_states, hidden_states = self.self_attn_residual_norm(
+            hidden_states, attn_output, gate_msa, null_shift, null_scale)
+        norm_hidden_states, hidden_states = norm_hidden_states.to(
+            orig_dtype), hidden_states.to(orig_dtype)
+
+        # 2. Cross-attention
+        attn_output = self.attn2(norm_hidden_states,
+                                 context=encoder_hidden_states,
+                                 context_lens=None)
+        norm_hidden_states, hidden_states = self.cross_attn_residual_norm(
+            hidden_states, attn_output, 1, c_shift_msa, c_scale_msa)
+        norm_hidden_states, hidden_states = norm_hidden_states.to(
+            orig_dtype), hidden_states.to(orig_dtype)
+
+        # 3. Feed-forward
+        ff_output = self.ffn(norm_hidden_states)
+        hidden_states = self.mlp_residual(hidden_states, ff_output, c_gate_msa)
+        hidden_states = hidden_states.to(orig_dtype)
+
+        return hidden_states
+
 class WanTransformer3DModel(CachableDiT):
     _fsdp_shard_conditions = WanVideoConfig()._fsdp_shard_conditions
     _compile_conditions = WanVideoConfig()._compile_conditions
@@ -549,6 +716,35 @@ class WanTransformer3DModel(CachableDiT):
     param_names_mapping = WanVideoConfig().param_names_mapping
     reverse_param_names_mapping = WanVideoConfig().reverse_param_names_mapping
     lora_param_names_mapping = WanVideoConfig().lora_param_names_mapping
+
+    def extra_preprocess_state_dict(self, custom_sd, reverse_param_names_mapping):
+        if self.attn_backend != "MONARCH_ATTN":
+            return
+        
+        attn1_replacements = [
+            ("to_q.weight", ["to_lq.weight", "to_rq.weight"]),
+            ("to_k.weight", ["to_lk.weight", "to_rk.weight"]),
+            ("to_q.bias", ["to_lq.bias", "to_rq.bias"]),
+            ("to_k.bias", ["to_lk.bias", "to_rk.bias"]),
+            ("norm_q.weight", ["norm_lq.weight", "norm_rq.weight"]),
+            ("norm_k.weight", ["norm_lk.weight", "norm_rk.weight"]),
+        ]
+
+        for custom_key in list(custom_sd.keys()):
+            for old_name, replace_custom in attn1_replacements:
+                if old_name in custom_key and "attn2" not in custom_key:
+                    old_hf_key = custom_key.replace(old_name, f"attn1.{old_name}")
+                    x, a, b = reverse_param_names_mapping[custom_key]
+                    assert a is None and b is None
+                    assert x == old_hf_key
+                    del reverse_param_names_mapping[custom_key]
+                    for r in replace_custom:
+                        new_custom_key = custom_key.replace(old_name, r)
+                        custom_sd[new_custom_key] = custom_sd[custom_key].clone()
+                        new_hf_key = old_hf_key.replace(old_name, r)
+                        reverse_param_names_mapping[new_hf_key] = (new_custom_key, None, None)
+                    del custom_sd[custom_key]
+                    break
 
     def __init__(self, config: WanVideoConfig, hf_config: dict[str,
                                                                Any]) -> None:
@@ -578,8 +774,8 @@ class WanTransformer3DModel(CachableDiT):
         )
 
         # 3. Transformer blocks
-        attn_backend = envs.FASTVIDEO_ATTENTION_BACKEND
-        transformer_block = WanTransformerBlock_VSA if attn_backend == "VIDEO_SPARSE_ATTN" else WanTransformerBlock
+        self.attn_backend = envs.FASTVIDEO_ATTENTION_BACKEND
+        transformer_block = WanTransformerBlock_VSA if self.attn_backend == "VIDEO_SPARSE_ATTN" else WanTransformerBlock_Monarch if self.attn_backend == "MONARCH_ATTN" else WanTransformerBlock
         self.blocks = nn.ModuleList([
             transformer_block(inner_dim,
                               config.ffn_dim,

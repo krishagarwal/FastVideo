@@ -167,6 +167,132 @@ class LinearBase(torch.nn.Module):
         raise NotImplementedError
 
 
+class BatchedReplicatedLinear(torch.nn.Module):
+    """
+    A replicated linear layer with a *batched parameter* sitting next to input dim.
+
+    Input shape:  (..., bsz, in_features)
+    Output shape: (..., bsz, out_features)
+
+    Per-batch parameters:
+      - weight: (bsz, out_features, in_features)
+      - bias:   (bsz, out_features)   [optional]
+
+    y[..., b, :] = x[..., b, :] @ weight[b].T + bias[b]
+
+    Args:
+        input_size (int): in_features
+        output_size (int): out_features
+        batch_size (int): bsz (the per-batch parameter axis)
+        bias (bool): include per-batch bias
+        skip_bias_add (bool): if True, don't add bias; return (y, bias) instead
+        params_dtype (torch.dtype | None): parameter dtype (defaults to torch.get_default_dtype())
+    """
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        batch_size: int,
+        bias: bool = True,
+        skip_bias_add: bool = False,
+        params_dtype: torch.dtype | None = None,
+        prefix: str = "",
+    ):
+        super().__init__()
+        if params_dtype is None:
+            params_dtype = torch.get_default_dtype()
+
+        self.input_size = input_size
+        self.output_size = output_size
+        self.batch_size = batch_size
+        self.skip_bias_add = skip_bias_add
+        self.params_dtype = params_dtype
+        self.prefix = prefix
+
+        # Per-batch weights: (bsz, out, in)
+        self.weight = Parameter(
+            torch.empty(batch_size, output_size, input_size, dtype=params_dtype),
+            requires_grad=True,
+        )
+        # Tag axes so loaders (and any generic utilities) know what’s what:
+        # weight[b, out, in]  -> batch_dim=0, output_dim=1, input_dim=2
+        set_weight_attrs(self.weight, {
+            "batch_dim": 0,
+            "output_dim": 1,
+            "input_dim": 2,
+            "weight_loader": self.weight_loader,
+        })
+
+        if bias:
+            # Per-batch bias: (bsz, out)
+            self.bias = Parameter(
+                torch.empty(batch_size, output_size, dtype=params_dtype),
+                requires_grad=True,
+            )
+            # bias[b, out] -> batch_dim=0, output_dim=1
+            set_weight_attrs(self.bias, {
+                "batch_dim": 0,
+                "output_dim": 1,
+                "weight_loader": self.weight_loader,
+            })
+        else:
+            self.register_parameter("bias", None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Match torch.nn.Linear’s spirit (uniform(-1/sqrt(fan_in), +1/sqrt(fan_in)))
+        bound = 1.0 / (self.input_size ** 0.5)
+        with torch.no_grad():
+            self.weight.uniform_(-bound, bound)
+            if self.bias is not None:
+                self.bias.uniform_(-bound, bound)
+
+    def weight_loader(self, param: Parameter, loaded_weight: torch.Tensor) -> None:
+        # Some checkpoints store scalars without shape (e.g., certain scale params)
+        if len(loaded_weight.shape) == 0:
+            loaded_weight = loaded_weight.reshape(1)
+
+        if param.data.size() != loaded_weight.size():
+            raise ValueError(
+                f"Tried to load weights of size {tuple(loaded_weight.size())} "
+                f"into parameter of size {tuple(param.data.size())}"
+            )
+        param.data.copy_(loaded_weight)
+
+    def forward(self, x: torch.Tensor):
+        """
+        x: (..., bsz, in_features)
+        returns:
+          - if skip_bias_add == False: (..., bsz, out_features)
+          - else: ((..., bsz, out_features), bias) where bias is (bsz, out_features)
+        """
+        if x.size(-1) != self.input_size:
+            raise ValueError(
+                f"Last dim of x must be input_size={self.input_size}, got {x.size(-1)}"
+            )
+        if x.size(-2) != self.batch_size:
+            raise ValueError(
+                f"Penultimate dim of x must be batch_size={self.batch_size}, got {x.size(-2)}"
+            )
+
+        y = torch.einsum("...bi,boi->...bo", x, self.weight)
+
+        if self.bias is None or self.skip_bias_add:
+            output_bias = self.bias
+        else:
+            output_bias = None
+            bias_reshaped = self.bias.view(*([1] * (y.dim() - 2)), self.batch_size, self.output_size)
+            y = y + bias_reshaped
+        
+        return y, output_bias
+
+    def extra_repr(self) -> str:
+        return (f"batch_size={self.batch_size}, in_features={self.input_size}, "
+                f"out_features={self.output_size}, bias={self.bias is not None}, "
+                f"skip_bias_add={self.skip_bias_add}")
+
+
 class ReplicatedLinear(LinearBase):
     """Replicated linear layer.
 

@@ -248,6 +248,8 @@ def load_model_from_full_model_state_dict(
     sharded_sd = {}
     custom_param_sd, reverse_param_names_mapping = hf_to_custom_state_dict(
         full_sd_iterator, param_names_mapping)  # type: ignore
+    if hasattr(model, "extra_preprocess_state_dict"):
+        model.extra_preprocess_state_dict(custom_param_sd, reverse_param_names_mapping)
     for target_param_name, full_tensor in custom_param_sd.items():
         meta_sharded_param = meta_sd.get(target_param_name)
         if meta_sharded_param is None:
@@ -276,7 +278,7 @@ def load_model_from_full_model_state_dict(
                        unused_keys)
 
     # List of allowed parameter name patterns
-    ALLOWED_NEW_PARAM_PATTERNS = ["gate_compress"]  # Can be extended as needed
+    ALLOWED_NEW_PARAM_PATTERNS = ["gate_compress", "to_rqq", "to_rqk", "to_rqv", "to_lkq", "to_lkk", "to_lkv"]  # Can be extended as needed
     for new_param_name in unused_keys:
         if not any(pattern in new_param_name
                    for pattern in ALLOWED_NEW_PARAM_PATTERNS):

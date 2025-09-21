@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     VERBOSE: bool = False
     FASTVIDEO_SERVER_DEV_MODE: bool = False
     FASTVIDEO_STAGE_LOGGING: bool = False
+    FASTVIDEO_MONARCH_USE_DYNAMIC: bool = False
 
 
 def get_default_cache_root() -> str:
@@ -177,6 +178,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # - "SAGE_ATTN": use Sage Attention
     "FASTVIDEO_ATTENTION_BACKEND":
     lambda: os.getenv("FASTVIDEO_ATTENTION_BACKEND", None),
+
+    "FASTVIDEO_MONARCH_USE_DYNAMIC":
+    lambda: bool(int(os.getenv("FASTVIDEO_MONARCH_USE_DYNAMIC", "0"))),
 
     # Path to the attention configuration file. Only used for sliding tile
     # attention for now.

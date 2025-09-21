@@ -34,6 +34,14 @@ class WanVideoArchConfig(DiTArchConfig):
             r"blocks.\1.to_q.\2",
             r"^blocks\.(\d+)\.attn1\.to_k\.(.*)$":
             r"blocks.\1.to_k.\2",
+            r"^blocks\.(\d+)\.attn1\.to_rq\.(.*)$":
+            r"blocks.\1.to_rq.\2",
+            r"^blocks\.(\d+)\.attn1\.to_rk\.(.*)$":
+            r"blocks.\1.to_rk.\2",
+            r"^blocks\.(\d+)\.attn1\.to_lq\.(.*)$":
+            r"blocks.\1.to_lq.\2",
+            r"^blocks\.(\d+)\.attn1\.to_lk\.(.*)$":
+            r"blocks.\1.to_lk.\2",
             r"^blocks\.(\d+)\.attn1\.to_v\.(.*)$":
             r"blocks.\1.to_v.\2",
             r"^blocks\.(\d+)\.attn1\.to_out\.0\.(.*)$":
@@ -42,6 +50,14 @@ class WanVideoArchConfig(DiTArchConfig):
             r"blocks.\1.norm_q.\2",
             r"^blocks\.(\d+)\.attn1\.norm_k\.(.*)$":
             r"blocks.\1.norm_k.\2",
+            r"^blocks\.(\d+)\.attn1\.norm_lq\.(.*)$":
+            r"blocks.\1.norm_lq.\2",
+            r"^blocks\.(\d+)\.attn1\.norm_lk\.(.*)$":
+            r"blocks.\1.norm_lk.\2",
+            r"^blocks\.(\d+)\.attn1\.norm_rq\.(.*)$":
+            r"blocks.\1.norm_rq.\2",
+            r"^blocks\.(\d+)\.attn1\.norm_rk\.(.*)$":
+            r"blocks.\1.norm_rk.\2",
             r"^blocks\.(\d+)\.attn2\.to_out\.0\.(.*)$":
             r"blocks.\1.attn2.to_out.\2",
             r"^blocks\.(\d+)\.ffn\.net\.0\.proj\.(.*)$":
