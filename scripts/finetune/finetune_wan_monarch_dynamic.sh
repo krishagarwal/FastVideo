@@ -73,7 +73,8 @@ miscellaneous_args=(
   --seed 1000
 )
 
-export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
+cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
+export HF_HOME="/workspace"
 
 torchrun \
 --nproc_per_node 8 \
