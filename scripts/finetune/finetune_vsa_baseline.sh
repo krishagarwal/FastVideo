@@ -75,6 +75,7 @@ miscellaneous_args=(
 export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
 
 torchrun \
+--nnodes 1 \
 --nproc_per_node 8 \
 --rdzv-endpoint=localhost:34586 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
