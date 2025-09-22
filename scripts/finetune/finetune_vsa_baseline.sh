@@ -4,7 +4,7 @@ export FASTVIDEO_ATTENTION_BACKEND=VIDEO_SPARSE_ATTN
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
-VALIDATION_DATASET_FILE=examples/distill/Wan2.1-T2V/Wan-Syn-Data-480P/validation_64.json
+VALIDATION_DATASET_FILE=examples/distill/Wan2.1-T2V/Wan-Syn-Data-480P/validation.json
 
 # Training arguments
 training_args=(
@@ -24,10 +24,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 8
+  --num_gpus 16
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 8
+  --hsdp_replicate_dim 16
   --hsdp_shard_dim 1
 )
 
@@ -76,8 +76,8 @@ export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
 
 torchrun \
 --nnodes 1 \
---nproc_per_node 8 \
---rdzv-endpoint=localhost:34586 \
+--nproc_per_node 16 \
+--rdzv-endpoint=beidchen-olmo2-worker-4:34582 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \
