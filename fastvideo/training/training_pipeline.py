@@ -651,12 +651,12 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 print(f"Rank {self.global_rank}: ({msg}) Free memory (GB): {free_memory_bytes / 1024**3:.2f}, Allocated memory (GB): {allocated_memory_bytes / 1024**3:.2f}, Reserved memory (GB): {torch.cuda.memory_reserved() / 1024**3:.2f}")
 
             for validation_batch in validation_dataloader:
-                # print_mem("before prepare batch")
+                print_mem("before prepare batch")
                 batch = self._prepare_validation_batch(sampling_param,
                                                        training_args,
                                                        validation_batch,
                                                        num_inference_steps)
-                # print_mem("after prepare batch")
+                print_mem("after prepare batch")
                 logger.info("rank: %s: rank_in_sp_group: %s, batch.prompt: %s",
                             self.global_rank,
                             self.rank_in_sp_group,
@@ -667,9 +667,9 @@ class TrainingPipeline(LoRAPipeline, ABC):
                     batch.prompt, str)
                 step_captions.append(batch.prompt)
 
-                # print_mem("before forward")
-                # while True:
-                #     pass
+                print_mem("before forward")
+                while True:
+                    pass
 
                 # Run validation inference
                 output_batch = self.validation_pipeline.forward(
