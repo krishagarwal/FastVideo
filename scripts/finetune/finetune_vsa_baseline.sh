@@ -4,7 +4,7 @@ export FASTVIDEO_ATTENTION_BACKEND=VIDEO_SPARSE_ATTN
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
-VALIDATION_DATASET_FILE=examples/training/finetune/wan_t2v_1.3B/crush_smol/validation.json
+VALIDATION_DATASET_FILE=examples/distill/Wan2.1-T2V/Wan-Syn-Data-480P/validation_64.json
 
 # Training arguments
 training_args=(
