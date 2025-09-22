@@ -837,7 +837,7 @@ class WanTransformer3DModel(CachableDiT):
             encoder_hidden_states_image = None
 
         batch_size, num_channels, num_frames, height, width = hidden_states.shape
-        print(hidden_states.shape)
+        # print(hidden_states.shape)
 
         p_t, p_h, p_w = self.patch_size
         post_patch_num_frames = num_frames // p_t
