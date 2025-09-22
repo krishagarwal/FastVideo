@@ -667,9 +667,9 @@ class TrainingPipeline(LoRAPipeline, ABC):
                     batch.prompt, str)
                 step_captions.append(batch.prompt)
 
-                print_mem("before forward")
-                while True:
-                    pass
+                print_mem("before empty cache")
+                torch.cuda.empty_cache()
+                print_mem("after empty cache, before forward")
 
                 # Run validation inference
                 output_batch = self.validation_pipeline.forward(

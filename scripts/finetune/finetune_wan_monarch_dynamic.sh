@@ -11,7 +11,7 @@ VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/valid
 # Training arguments
 training_args=(
   --tracker_project_name fastwan
-  --wandb_run_name wan_1.3b_t2v_monarch_dynamic_no_efa
+  --wandb_run_name wan_1.3b_t2v_monarch_dynamic_no_efa_new
   --output_dir "checkpoints/wan_1.3b_t2v_finetune_monarch_dynamic"
   --max_train_steps 4000
   --train_batch_size 1
@@ -26,10 +26,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 16
+  --num_gpus 64
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 16
+  --hsdp_replicate_dim 64
   --hsdp_shard_dim 1
 )
 
@@ -76,6 +76,7 @@ miscellaneous_args=(
 
 # cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
 export HF_HOME="/workspace"
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 torchrun \
 --nproc_per_node 8 \
