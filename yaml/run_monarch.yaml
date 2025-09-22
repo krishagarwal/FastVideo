@@ -92,7 +92,7 @@ spec:
                   cd /code-fsx/beidchen-sandbox/FastVideo &&
                   pip install -e . &&
                   cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace &&
-                  bash scripts/finetune/finetune_wan_monarch.sh | tee /code-fsx/beidchen-sandbox/fastwan_monarch_16xh200_train.log &&
+                  bash scripts/finetune/finetune_wan_monarch.sh | tee /code-fsx/beidchen-sandbox/fastwan_monarch_16xh200_train.log
               image: 767397878797.dkr.ecr.us-east-1.amazonaws.com/agif-mm-pt-base:reasoning-vllm.sglang.megatron.deepseek.1
               imagePullPolicy: Always
               securityContext:
