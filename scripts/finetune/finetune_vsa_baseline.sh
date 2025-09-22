@@ -24,10 +24,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 16
+  --num_gpus 8
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 16
+  --hsdp_replicate_dim 8
   --hsdp_shard_dim 1
 )
 
@@ -76,6 +76,7 @@ export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
 
 torchrun \
 --nproc_per_node 8 \
+--rdvz-endpoint=localhost:34586 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \
