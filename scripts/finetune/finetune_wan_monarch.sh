@@ -4,7 +4,8 @@ export FASTVIDEO_ATTENTION_BACKEND=MONARCH_ATTN
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
-VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/validation_64.json
+# VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/validation_64.json
+VALIDATION_DATASET_FILE=examples/training/finetune/wan_t2v_1.3B/crush_smol/validation.json
 
 # Training arguments
 training_args=(
@@ -24,10 +25,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 64
+  --num_gpus 16
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 64
+  --hsdp_replicate_dim 16
   --hsdp_shard_dim 1
 )
 
@@ -48,7 +49,7 @@ validation_args=(
   --log_validation
   --validation_dataset_file $VALIDATION_DATASET_FILE
   --validation_steps 200
-  --validation_sampling_steps "50"
+  --validation_sampling_steps "3"
   --validation_guidance_scale "5.0"
 )
 
@@ -77,6 +78,8 @@ export HF_HOME="/workspace"
 
 torchrun \
 --nproc_per_node 8 \
+--nnodes 2 \
+--rdzv-endpoint=beidchen-olmo2-worker-4:34582 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \
