@@ -24,10 +24,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 64
+  --num_gpus 16
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 64
+  --hsdp_replicate_dim 16
   --hsdp_shard_dim 1
 )
 
@@ -76,6 +76,8 @@ miscellaneous_args=(
 export HF_HOME="/workspace"
 
 torchrun \
+--nnodes 2 \
+--rdzv-endpoint=beidchen-olmo2-worker-4:34582 \
 --nproc_per_node 8 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
