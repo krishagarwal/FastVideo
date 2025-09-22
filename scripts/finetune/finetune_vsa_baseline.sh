@@ -76,7 +76,7 @@ export HF_HOME="/checkpoint-fsx/beidchen-sandbox/video"
 
 torchrun \
 --nproc_per_node 8 \
---rdvz-endpoint=localhost:34586 \
+--rdzv-endpoint=localhost:34586 \
 --rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \
