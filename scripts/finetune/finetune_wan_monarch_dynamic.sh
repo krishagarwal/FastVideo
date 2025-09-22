@@ -15,7 +15,7 @@ training_args=(
   --max_train_steps 4000
   --train_batch_size 1
   --train_sp_batch_size 1
-  --gradient_accumulation_steps 1
+  --gradient_accumulation_steps 4
   --num_latent_t 20
   --num_height 448
   --num_width 832
@@ -25,10 +25,10 @@ training_args=(
 
 # Parallel arguments
 parallel_args=(
-  --num_gpus 64
+  --num_gpus 16
   --sp_size 1
   --tp_size 1
-  --hsdp_replicate_dim 64
+  --hsdp_replicate_dim 16
   --hsdp_shard_dim 1
 )
 
@@ -73,7 +73,7 @@ miscellaneous_args=(
   --seed 1000
 )
 
-cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
+# cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
 export HF_HOME="/workspace"
 
 torchrun \

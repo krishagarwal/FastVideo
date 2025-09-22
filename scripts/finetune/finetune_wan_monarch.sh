@@ -72,6 +72,7 @@ miscellaneous_args=(
   --seed 1000
 )
 
+# cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
 export HF_HOME="/workspace"
 
 torchrun \
