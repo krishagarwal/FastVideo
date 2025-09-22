@@ -668,8 +668,8 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 step_captions.append(batch.prompt)
 
                 print_mem("before forward")
-                while True:
-                    pass
+                # while True:
+                #     pass
 
                 # Run validation inference
                 output_batch = self.validation_pipeline.forward(

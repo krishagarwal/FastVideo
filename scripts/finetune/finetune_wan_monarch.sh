@@ -48,7 +48,7 @@ validation_args=(
   --log_validation
   --validation_dataset_file $VALIDATION_DATASET_FILE
   --validation_steps 200
-  --validation_sampling_steps "50"
+  --validation_sampling_steps 1
   --validation_guidance_scale "5.0"
 )
 
