@@ -10,7 +10,7 @@ VALIDATION_DATASET_FILE=examples/training/finetune/wan_t2v_1.3B/crush_smol/valid
 # Training arguments
 training_args=(
   --tracker_project_name fastwan
-  --wandb_run_name wan_1.3b_t2v_monarch_no_efa
+  --wandb_run_name wan_1.3b_t2v_monarch_no_efa_2
   --output_dir "checkpoints/wan_1.3b_t2v_finetune_monarch"
   --max_train_steps 4000
   --train_batch_size 1
