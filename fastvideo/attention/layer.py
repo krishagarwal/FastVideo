@@ -271,6 +271,160 @@ class LocalAttention(nn.Module):
         output = self.attn_impl.forward(q, k, v, ctx_attn_metadata)
         return output
 
+# class MonarchAttention(nn.Module):
+
+#     def __init__(self,
+#                  num_heads: int,
+#                  head_size: int,
+#                  softmax_scale: float | None = None,
+#                  causal: bool = False,
+#                  prefix: str = "",
+#                  **extra_impl_args) -> None:
+#         super().__init__()
+#         if softmax_scale is None:
+#             self.softmax_scale = head_size**-0.5
+#         else:
+#             self.softmax_scale = softmax_scale
+
+#         assert not causal, "assuming non-causal for now"
+
+#         self.use_dynamic = envs.FASTVIDEO_MONARCH_USE_DYNAMIC
+
+#         dtype = get_compute_dtype()
+#         self.num_heads = num_heads
+#         self.head_size = head_size
+#         self.dtype = dtype
+
+#         self.to_lkq = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkq")
+#         self.to_lkk = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkk")
+#         self.to_lkv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkv")
+#         self.to_rqq = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqq")
+#         self.to_rqk = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqk")
+#         self.to_rqv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqv")
+
+#     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
+#         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
+
+#     def get_block_sizes(self, seq_len):
+#         if not self.use_dynamic:
+#             seq_len_per_frame = 1456
+#             return (seq_len_per_frame // 52, 52)
+#         else:
+#             factors = [(i, seq_len // i) for i in range(1, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
+#             # choose the pair closest to square where one factor is divisible by 52
+#             remaining = [f for f in factors if f[0] % 52 == 0 or f[1] % 52 == 0]
+#             assert len(remaining) > 0, "Cannot find block sizes divisible by 52"
+#             factors = remaining[-1]
+#             if factors[1] % 52 == 0:
+#                 return factors
+#             else:
+#                 return (factors[1], factors[0])
+
+#     def local_q(self, q, k, v, cos_j, sin_j):
+#         batch_size, num_frames, q_seq_len, _, _ = q.shape
+#         new_batch_size = batch_size * num_frames * q_seq_len
+
+#         q = q.view(new_batch_size, 1, self.num_heads, self.head_size)
+#         k = rearrange(k, 'b f i j h d -> (b f j) i h d')
+#         v = rearrange(v, 'b f i j h d -> (b f j) i h d')
+
+#         assert new_batch_size == k.size(0) and new_batch_size == v.size(0)
+
+#         x = flash_attention(q, k, v, softmax_scale=self.softmax_scale)
+#         x = rearrange(x, '(b f j) 1 h d -> b (f j) h d', b=batch_size, f=num_frames)
+#         x = self.rot_emb_flat_unflat(x, cos_j, sin_j, is_neox_style=False)
+
+#         return rearrange(x, 'b (f j) h d -> b f j h d', f=num_frames)
+    
+#     def local_k(self, q, k, v, cos_k, sin_k):
+#         batch_size, num_frames, q_seq_len, _, _ = q.shape
+#         new_batch_size = batch_size * num_frames * q_seq_len
+
+#         q = q.view(new_batch_size, 1, self.num_heads, self.head_size)
+#         k = k.view(new_batch_size, -1, self.num_heads, self.head_size)
+#         v = v.view(new_batch_size, -1, self.num_heads, self.head_size)
+
+#         x = flash_attention(q, k, v, softmax_scale=self.softmax_scale)
+#         x = rearrange(x, '(b f k) 1 h d -> b (f k) h d', b=batch_size, f=num_frames)
+#         x = self.rot_emb_flat_unflat(x, cos_k, sin_k, is_neox_style=False)
+
+#         return rearrange(x, 'b (f k) h d -> b f k h d', f=num_frames)
+
+#     @torch.compiler.disable
+#     def forward(
+#         self,
+#         lq: torch.Tensor,
+#         lk: torch.Tensor,
+#         rq: torch.Tensor,
+#         rk: torch.Tensor,
+#         v: torch.Tensor,
+#         freqs_cis: torch.Tensor,
+#     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+#         """Forward pass for distributed attention.
+        
+#         Args:
+#             q (torch.Tensor): Query tensor [batch_size, seq_len, num_heads, head_dim]
+#             k (torch.Tensor): Key tensor [batch_size, seq_len, num_heads, head_dim]
+#             v (torch.Tensor): Value tensor [batch_size, seq_len, num_heads, head_dim]
+#             replicated_q (Optional[torch.Tensor]): Replicated query tensor, typically for text tokens
+#             replicated_k (Optional[torch.Tensor]): Replicated key tensor
+#             replicated_v (Optional[torch.Tensor]): Replicated value tensor
+            
+#         Returns:
+#             Tuple[torch.Tensor, Optional[torch.Tensor]]: A tuple containing:
+#                 - o (torch.Tensor): Output tensor after attention for the main sequence
+#                 - replicated_o (Optional[torch.Tensor]): Output tensor for replicated tokens, if provided
+#         """
+#         # Check text tokens are not supported for VSA now
+#         assert lq.dim() == 4 and lk.dim() == 4 and rq.dim() == 4 and rk.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
+#         assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
+
+#         batch_size = lq.size(0)
+#         block_b1, block_b2 = self.get_block_sizes(lq.size(-3))
+        
+#         cos, sin = freqs_cis
+#         lq = self.rot_emb_flat_unflat(lq, cos, sin, is_neox_style=False)
+
+#         lkq = lk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)[:, :, :, 0]
+#         lkq, _ = self.to_lkq(lkq)
+#         cos_k, sin_k = cos.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1)
+#         lkq = self.rot_emb_flat_unflat(lkq.view(batch_size, -1, self.num_heads, self.head_size), cos_k, sin_k, is_neox_style=False).view(batch_size, -1, block_b1, self.num_heads, self.head_size)
+#         lkk = self.rot_emb_flat_unflat(self.to_lkk(lk)[0], cos, sin, is_neox_style=False)
+#         lkv, _ = self.to_lkv(lk)
+
+#         lq = lq.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+#         lkq = lkq.view(batch_size, -1, block_b1, self.num_heads, self.head_size)
+#         lkk = lkk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+#         lkv = lkv.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+
+#         lk = self.local_k(lkq, lkk, lkv, cos_k, sin_k)
+
+#         L = torch.einsum('baijhd,bfkhd->bhafjik', lq, lk)
+
+#         rk = self.rot_emb_flat_unflat(rk, cos, sin, is_neox_style=False)
+
+#         rqq = rq.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)[:, :, 0]
+#         rqq, _ = self.to_rqq(rqq)
+#         cos_j, sin_j = cos.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1)
+#         rqq = self.rot_emb_flat_unflat(rqq.view(batch_size, -1, self.num_heads, self.head_size), cos_j, sin_j, is_neox_style=False).view(batch_size, -1, block_b2, self.num_heads, self.head_size)
+#         rqk = self.rot_emb_flat_unflat(self.to_rqk(rq)[0], cos, sin, is_neox_style=False)
+#         rqv, _ = self.to_rqv(rq)
+
+#         rk = rk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+#         rqq = rqq.view(batch_size, -1, block_b2, self.num_heads, self.head_size)
+#         rqk = rqk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+#         rqv = rqv.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+
+#         rq = self.local_q(rqq, rqk, rqv, cos_j, sin_j)
+
+#         R = torch.einsum('bajhd,bfklhd->bhafkjl', rq, rk)
+
+#         out = torch.einsum('bhafjik,bhafkjl->bhafijkl', L, R)
+#         out = rearrange(out, 'b h a f i j k l -> b h (a i j) (f k l)')
+#         out = torch.softmax(out * self.softmax_scale, dim=-1)
+#         return torch.einsum('bhsl,blhd->bshd', out, v), None
+
+
 class MonarchAttention(nn.Module):
 
     def __init__(self,
@@ -295,12 +449,12 @@ class MonarchAttention(nn.Module):
         self.head_size = head_size
         self.dtype = dtype
 
-        self.to_lkq = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkq")
-        self.to_lkk = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkk")
-        self.to_lkv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkv")
-        self.to_rqq = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqq")
-        self.to_rqk = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqk")
-        self.to_rqv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqv")
+        # self.to_lkq = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkq")
+        # self.to_lkk = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkk")
+        # self.to_lkv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_lkv")
+        # self.to_rqq = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqq")
+        # self.to_rqk = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqk")
+        # self.to_rqv = BatchedReplicatedLinear(self.head_size, self.head_size, num_heads, bias=True, prefix=f"{prefix}.to_rqv")
 
     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
@@ -324,7 +478,7 @@ class MonarchAttention(nn.Module):
         batch_size, num_frames, q_seq_len, _, _ = q.shape
         new_batch_size = batch_size * num_frames * q_seq_len
 
-        q = q.view(new_batch_size, 1, self.num_heads, self.head_size)
+        q = q.reshape(new_batch_size, 1, self.num_heads, self.head_size)
         k = rearrange(k, 'b f i j h d -> (b f j) i h d')
         v = rearrange(v, 'b f i j h d -> (b f j) i h d')
 
@@ -353,10 +507,8 @@ class MonarchAttention(nn.Module):
     @torch.compiler.disable
     def forward(
         self,
-        lq: torch.Tensor,
-        lk: torch.Tensor,
-        rq: torch.Tensor,
-        rk: torch.Tensor,
+        q: torch.Tensor,
+        k: torch.Tensor,
         v: torch.Tensor,
         freqs_cis: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -376,48 +528,30 @@ class MonarchAttention(nn.Module):
                 - replicated_o (Optional[torch.Tensor]): Output tensor for replicated tokens, if provided
         """
         # Check text tokens are not supported for VSA now
-        assert lq.dim() == 4 and lk.dim() == 4 and rq.dim() == 4 and rk.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
+        assert q.dim() == 4 and k.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
         assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
 
-        batch_size = lq.size(0)
-        block_b1, block_b2 = self.get_block_sizes(lq.size(-3))
+        batch_size = q.size(0)
+        block_b1, block_b2 = self.get_block_sizes(q.size(-3))
         
         cos, sin = freqs_cis
-        lq = self.rot_emb_flat_unflat(lq, cos, sin, is_neox_style=False)
+        rope_q = self.rot_emb_flat_unflat(q, cos, sin, is_neox_style=False)
+        rope_k = self.rot_emb_flat_unflat(k, cos, sin, is_neox_style=False)
 
-        lkq = lk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)[:, :, :, 0]
-        lkq, _ = self.to_lkq(lkq)
+        q = q.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+        k = k.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+        rope_q = rope_q.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+        rope_k = rope_k.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
+
         cos_k, sin_k = cos.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1)
-        lkq = self.rot_emb_flat_unflat(lkq.view(batch_size, -1, self.num_heads, self.head_size), cos_k, sin_k, is_neox_style=False).view(batch_size, -1, block_b1, self.num_heads, self.head_size)
-        lkk = self.rot_emb_flat_unflat(self.to_lkk(lk)[0], cos, sin, is_neox_style=False)
-        lkv, _ = self.to_lkv(lk)
+        lk = self.local_k(rope_k[:, :, :, 0], rope_k, k, cos_k, sin_k)
+        L = torch.einsum('baijhd,bfkhd->bhafjik', rope_q, lk)
 
-        lq = lq.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
-        lkq = lkq.view(batch_size, -1, block_b1, self.num_heads, self.head_size)
-        lkk = lkk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
-        lkv = lkv.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
-
-        lk = self.local_k(lkq, lkk, lkv, cos_k, sin_k)
-
-        L = torch.einsum('baijhd,bfkhd->bhafjik', lq, lk)
-
-        rk = self.rot_emb_flat_unflat(rk, cos, sin, is_neox_style=False)
-
-        rqq = rq.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)[:, :, 0]
-        rqq, _ = self.to_rqq(rqq)
         cos_j, sin_j = cos.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1)
-        rqq = self.rot_emb_flat_unflat(rqq.view(batch_size, -1, self.num_heads, self.head_size), cos_j, sin_j, is_neox_style=False).view(batch_size, -1, block_b2, self.num_heads, self.head_size)
-        rqk = self.rot_emb_flat_unflat(self.to_rqk(rq)[0], cos, sin, is_neox_style=False)
-        rqv, _ = self.to_rqv(rq)
+        rq = self.local_q(rope_q[:, :, 0], rope_q, q, cos_j, sin_j)
+        R = torch.einsum('bajhd,bfklhd->bhafkjl', rq, rope_k)
 
-        rk = rk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
-        rqq = rqq.view(batch_size, -1, block_b2, self.num_heads, self.head_size)
-        rqk = rqk.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
-        rqv = rqv.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
-
-        rq = self.local_q(rqq, rqk, rqv, cos_j, sin_j)
-
-        R = torch.einsum('bajhd,bfklhd->bhafkjl', rq, rk)
+        v = v.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
 
         out = torch.einsum('bhafjik,bhafkjl->bhafijkl', L, R)
         out = rearrange(out, 'b h a f i j k l -> b h (a i j) (f k l)')

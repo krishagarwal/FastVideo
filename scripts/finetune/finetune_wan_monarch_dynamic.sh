@@ -11,8 +11,8 @@ VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/valid
 # Training arguments
 training_args=(
   --tracker_project_name fastwan
-  --wandb_run_name wan_1.3b_t2v_monarch_dynamic_no_efa_new
-  --output_dir "checkpoints/wan_1.3b_t2v_finetune_monarch_dynamic"
+  --wandb_run_name wan_1.3b_t2v_monarch_dynamic_max_constrain
+  --output_dir "checkpoints/wan_1.3b_t2v_finetune_monarch_dynamic_max_constrain"
   --max_train_steps 4000
   --train_batch_size 1
   --train_sp_batch_size 1
