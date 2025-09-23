@@ -86,6 +86,7 @@ spec:
                   mount -o remount,size=16G /dev/shm && 
                   export WANDB_API_KEY="4b48dba8c7c02e44280b472407526572480b6d41" &&
                   export WANDB_MODE=online &&
+                  export NCCL_BLOCKING_WAIT=1 &&
                   wandb login --relogin $WANDB_API_KEY &&
                   mkdir -p /checkpoint-fsx/beidchen-sandbox/video/fastwan/wandb &&
                   export WANDB_DIR=/checkpoint-fsx/beidchen-sandbox/video/fastwan/wandb &&
