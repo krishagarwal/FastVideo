@@ -462,7 +462,7 @@ class MonarchAttention(nn.Module):
     def get_block_sizes(self, seq_len):
         if not self.use_dynamic:
             seq_len_per_frame = 1456
-            return (seq_len_per_frame // 52, 52)
+            return (seq_len_per_frame // 728, 728)
         else:
             factors = [(i, seq_len // i) for i in range(1, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
             # choose the pair closest to square where one factor is divisible by 52
