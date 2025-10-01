@@ -407,9 +407,13 @@ def get_rotary_pos_embed(
     ) == head_dim, "sum(rope_dim_list) should equal to head_dim of attention layer"
 
     # Get SP info
-    sp_group = get_sp_group()
-    sp_rank = sp_group.rank_in_group
-    sp_world_size = sp_group.world_size
+    try:
+        sp_group = get_sp_group()
+        sp_rank = sp_group.rank_in_group
+        sp_world_size = sp_group.world_size
+    except Exception:
+        sp_rank = 0
+        sp_world_size = 1
 
     freqs_cos, freqs_sin = get_nd_rotary_pos_embed(
         rope_dim_list,

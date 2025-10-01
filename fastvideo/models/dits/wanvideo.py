@@ -343,6 +343,9 @@ class WanTransformerBlock(nn.Module):
         # 1. Self-attention
         norm_hidden_states = (self.norm1(hidden_states.float()) *
                               (1 + scale_msa) + shift_msa).to(orig_dtype)
+        # if envs.RECORD_ENABLE:
+            # torch.save(norm_hidden_states, f"layer_data/{envs.CURR_PROMPT_DIR}/x{envs.CURR_LAYER}_t{envs.SELECTED_TIMESTEP}.pt")
+
         query, _ = self.to_q(norm_hidden_states)
         key, _ = self.to_k(norm_hidden_states)
         value, _ = self.to_v(norm_hidden_states)
@@ -363,6 +366,9 @@ class WanTransformerBlock(nn.Module):
                                            key, cos, sin, is_neox_style=False)
 
         attn_output, _ = self.attn1(query, key, value)
+        # if envs.RECORD_ENABLE:
+        #     torch.save(attn_output, f"layer_data/{envs.CURR_PROMPT_DIR}/o{envs.CURR_LAYER}_t{envs.SELECTED_TIMESTEP}.pt")
+
         attn_output = attn_output.flatten(2)
         attn_output, _ = self.to_out(attn_output)
         attn_output = attn_output.squeeze(1)
@@ -1055,17 +1061,21 @@ class WanTransformer3DModel(CachableDiT):
                 original_hidden_states = hidden_states.clone()
 
             if torch.is_grad_enabled() and self.gradient_checkpointing:
-                for block in self.blocks:
+                for i, block in enumerate(self.blocks):
+                    # envs.CURR_LAYER = i
                     hidden_states = self._gradient_checkpointing_func(
                         block, hidden_states, encoder_hidden_states,
                         timestep_proj, freqs_cis)
             else:
-                for block in self.blocks:
+                for i, block in enumerate(self.blocks):
+                    # envs.CURR_LAYER = i
                     hidden_states = block(hidden_states, encoder_hidden_states,
                                           timestep_proj, freqs_cis)
             # if teacache is enabled, we need to cache the original hidden states
             if enable_teacache:
                 self.maybe_cache_states(hidden_states, original_hidden_states)
+        # if envs.RECORD_ENABLE:
+        #     envs.CURR_PROMPT_DIR += 1
         # 5. Output norm, projection & unpatchify
         if temb.dim() == 3:
             # batch_size, seq_len, inner_dim (wan 2.2 ti2v)
@@ -1101,6 +1111,9 @@ class WanTransformer3DModel(CachableDiT):
 
         forward_context = get_forward_context()
         forward_batch = forward_context.forward_batch
+        current_timestep = forward_context.current_timestep
+        num_inference_steps = forward_batch.num_inference_steps
+        # envs.RECORD_ENABLE = (current_timestep == envs.SELECTED_TIMESTEP) and not envs.IS_NEG_PROMPT
         if forward_batch is None or not forward_batch.enable_teacache:
             return False
         teacache_params = forward_batch.teacache_params
@@ -1108,8 +1121,6 @@ class WanTransformer3DModel(CachableDiT):
         assert isinstance(
             teacache_params,
             WanTeaCacheParams), "teacache_params is not a WanTeaCacheParams"
-        current_timestep = forward_context.current_timestep
-        num_inference_steps = forward_batch.num_inference_steps
 
         # initialize the coefficients, cutoff_steps, and ret_steps
         coefficients = teacache_params.coefficients

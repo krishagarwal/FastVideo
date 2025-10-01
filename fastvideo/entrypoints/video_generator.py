@@ -8,6 +8,7 @@ diffusion models.
 
 import math
 import os
+# import random
 import time
 from copy import deepcopy
 from typing import Any
@@ -18,6 +19,7 @@ import torch
 import torchvision
 from einops import rearrange
 
+# from fastvideo import envs
 from fastvideo.configs.sample import SamplingParam
 from fastvideo.fastvideo_args import FastVideoArgs
 from fastvideo.logger import init_logger
@@ -146,11 +148,15 @@ class VideoGenerator:
                 original_output_video_name = sampling_param.output_video_name
             else:
                 original_output_video_name = None
-
+            
+            # curr_count = envs.CURR_PROMPT_DIR
             results = []
             for i, batch_prompt in enumerate(prompts):
                 logger.info("Processing prompt %d/%d: %s...", i + 1,
                             len(prompts), batch_prompt[:100])
+                # os.makedirs(f"layer_data/{curr_count}", exist_ok=True)
+                # with open(f"layer_data/{curr_count}/prompt.txt", "w", encoding="utf-8") as f:
+                #     f.write(batch_prompt + "\n")
 
                 try:
                     # Generate video for this prompt using the same logic below
@@ -172,6 +178,8 @@ class VideoGenerator:
                     logger.error("Failed to generate video for prompt %d: %s",
                                  i + 1, e)
                     continue
+                # finally:
+                #     curr_count += 1
 
             logger.info(
                 "Completed batch processing. Generated %d videos successfully.",

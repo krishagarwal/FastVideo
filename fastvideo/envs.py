@@ -29,6 +29,11 @@ if TYPE_CHECKING:
     FASTVIDEO_SERVER_DEV_MODE: bool = False
     FASTVIDEO_STAGE_LOGGING: bool = False
     FASTVIDEO_MONARCH_USE_DYNAMIC: bool = False
+    # CURR_PROMPT_DIR: int = 0
+    # RECORD_ENABLE: bool = False
+    # CURR_LAYER: int = 0
+    # SELECTED_TIMESTEP: int = 0
+    # IS_NEG_PROMPT: bool = False
 
 
 def get_default_cache_root() -> str:
@@ -210,6 +215,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # taken for each stage
     "FASTVIDEO_STAGE_LOGGING":
     lambda: bool(int(os.getenv("FASTVIDEO_STAGE_LOGGING", "0"))),
+
+    # "CURR_PROMPT_DIR": lambda: int(os.getenv("CURR_PROMPT_DIR", "0")),
+    # "CURR_LAYER": lambda: int(os.getenv("CURR_LAYER", "0")),
+    # "RECORD_ENABLE": lambda: bool(int(os.getenv("RECORD_ENABLE", "0"))),
+    # "SELECTED_TIMESTEP": lambda: int(os.getenv("SELECTED_TIMESTEP", "0")),
+    # "IS_NEG_PROMPT": lambda: bool(int(os.getenv("IS_NEG_PROMPT", "0"))),
 }
 
 # end-env-vars-definition

@@ -5,6 +5,7 @@ Denoising stage for diffusion pipelines.
 
 import inspect
 import math
+# import random
 import weakref
 from collections.abc import Iterable
 from typing import Any
@@ -13,6 +14,7 @@ import torch
 from einops import rearrange
 from tqdm.auto import tqdm
 
+# from fastvideo import envs
 from fastvideo.attention import get_attn_backend
 from fastvideo.configs.pipelines.base import STA_Mode
 from fastvideo.distributed import (get_local_torch_device, get_sp_parallel_rank,
@@ -257,6 +259,8 @@ class DenoisingStage(PipelineStage):
         trajectory_timesteps: list[torch.Tensor] = []
         trajectory_latents: list[torch.Tensor] = []
 
+        # envs.SELECTED_TIMESTEP = random.randrange(0, num_inference_steps)
+
         # Run denoising loop
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
@@ -386,6 +390,7 @@ class DenoisingStage(PipelineStage):
                             forward_batch=batch,
                             # fastvideo_args=fastvideo_args
                     ):
+                        # envs.IS_NEG_PROMPT = False
                         # Run transformer
                         noise_pred = current_model(
                             latent_model_input,
@@ -405,6 +410,7 @@ class DenoisingStage(PipelineStage):
                                 forward_batch=batch,
                                 # fastvideo_args=fastvideo_args
                         ):
+                            # envs.IS_NEG_PROMPT = True
                             # Run transformer
                             noise_pred_uncond = current_model(
                                 latent_model_input,

@@ -15,6 +15,8 @@ from fastvideo.utils import get_compute_dtype
 from fastvideo.layers.rotary_embedding import _apply_rotary_emb
 from fastvideo.layers.linear import BatchedReplicatedLinear
 from fastvideo.attention.flash_attn import flash_attention
+from fastvideo.layers.layernorm import RMSNorm
+from fastvideo.attention.monarch_attn import monarch_attn
 import fastvideo.envs as envs
 import math
 
@@ -432,6 +434,7 @@ class MonarchAttention(nn.Module):
                  head_size: int,
                  softmax_scale: float | None = None,
                  causal: bool = False,
+                 use_resid: bool = False,
                  prefix: str = "",
                  **extra_impl_args) -> None:
         super().__init__()
@@ -439,10 +442,15 @@ class MonarchAttention(nn.Module):
             self.softmax_scale = head_size**-0.5
         else:
             self.softmax_scale = softmax_scale
+        
+        dtype = get_compute_dtype()
+        self.norm_rq = RMSNorm(head_size, eps=1e-6, dtype=dtype)
+        self.norm_lk = RMSNorm(head_size, eps=1e-6, dtype=dtype)
 
         assert not causal, "assuming non-causal for now"
 
         self.use_dynamic = envs.FASTVIDEO_MONARCH_USE_DYNAMIC
+        self.use_resid = use_resid
 
         dtype = get_compute_dtype()
         self.num_heads = num_heads
@@ -462,7 +470,7 @@ class MonarchAttention(nn.Module):
     def get_block_sizes(self, seq_len):
         if not self.use_dynamic:
             seq_len_per_frame = 1456
-            return (seq_len_per_frame // 728, 728)
+            return (seq_len_per_frame // 52, 52)
         else:
             factors = [(i, seq_len // i) for i in range(1, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
             # choose the pair closest to square where one factor is divisible by 52
@@ -474,7 +482,7 @@ class MonarchAttention(nn.Module):
             else:
                 return (factors[1], factors[0])
 
-    def local_q(self, q, k, v, cos_j, sin_j):
+    def local_q(self, q, k, v, resid, cos_j, sin_j):
         batch_size, num_frames, q_seq_len, _, _ = q.shape
         new_batch_size = batch_size * num_frames * q_seq_len
 
@@ -485,12 +493,17 @@ class MonarchAttention(nn.Module):
         assert new_batch_size == k.size(0) and new_batch_size == v.size(0)
 
         x = flash_attention(q, k, v, softmax_scale=self.softmax_scale)
-        x = rearrange(x, '(b f j) 1 h d -> b (f j) h d', b=batch_size, f=num_frames)
+        if self.use_resid:
+            x = rearrange(x, '(b f j) 1 h d -> b f j h d', b=batch_size, f=num_frames)
+            x = rearrange(x + resid, 'b f j h d -> b (f j) h d')
+        else:
+            x = rearrange(x, '(b f j) 1 h d -> b (f j) h d', b=batch_size, f=num_frames)
+        x = self.norm_rq(x)
         x = self.rot_emb_flat_unflat(x, cos_j, sin_j, is_neox_style=False)
 
         return rearrange(x, 'b (f j) h d -> b f j h d', f=num_frames)
     
-    def local_k(self, q, k, v, cos_k, sin_k):
+    def local_k(self, q, k, v, resid, cos_k, sin_k):
         batch_size, num_frames, q_seq_len, _, _ = q.shape
         new_batch_size = batch_size * num_frames * q_seq_len
 
@@ -499,12 +512,17 @@ class MonarchAttention(nn.Module):
         v = v.view(new_batch_size, -1, self.num_heads, self.head_size)
 
         x = flash_attention(q, k, v, softmax_scale=self.softmax_scale)
-        x = rearrange(x, '(b f k) 1 h d -> b (f k) h d', b=batch_size, f=num_frames)
+        if self.use_resid:
+            x = rearrange(x, '(b f k) 1 h d -> b f k h d', b=batch_size, f=num_frames)
+            x = rearrange(x + resid, 'b f k h d -> b (f k) h d')
+        else:
+            x = rearrange(x, '(b f k) 1 h d -> b (f k) h d', b=batch_size, f=num_frames)
+        x = self.norm_lk(x)
         x = self.rot_emb_flat_unflat(x, cos_k, sin_k, is_neox_style=False)
 
         return rearrange(x, 'b (f k) h d -> b f k h d', f=num_frames)
 
-    @torch.compiler.disable
+    # @torch.compiler.disable
     def forward(
         self,
         q: torch.Tensor,
@@ -529,7 +547,7 @@ class MonarchAttention(nn.Module):
         """
         # Check text tokens are not supported for VSA now
         assert q.dim() == 4 and k.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
-        assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
+        # assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
 
         batch_size = q.size(0)
         block_b1, block_b2 = self.get_block_sizes(q.size(-3))
@@ -544,14 +562,16 @@ class MonarchAttention(nn.Module):
         rope_k = rope_k.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size)
 
         cos_k, sin_k = cos.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, :, 0].flatten(0, 1)
-        lk = self.local_k(rope_k[:, :, :, 0], rope_k, k, cos_k, sin_k)
-        L = torch.einsum('baijhd,bfkhd->bhafjik', rope_q, lk)
+        lk = self.local_k(rope_k[:, :, :, 0], rope_k, k, k[:, :, :, 0], cos_k, sin_k)
+        # L = torch.einsum('baijhd,bfkhd->bhafjik', rope_q, lk)
 
         cos_j, sin_j = cos.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1), sin.unflatten(0, (-1, block_b1, block_b2))[:, 0].flatten(0, 1)
-        rq = self.local_q(rope_q[:, :, 0], rope_q, q, cos_j, sin_j)
-        R = torch.einsum('bajhd,bfklhd->bhafkjl', rq, rope_k)
+        rq = self.local_q(rope_q[:, :, 0], rope_q, q, q[:, :, 0], cos_j, sin_j)
+        # R = torch.einsum('bajhd,bfklhd->bhafkjl', rq, rope_k)
 
-        out = torch.einsum('bhafjik,bhafkjl->bhafijkl', L, R)
-        out = rearrange(out, 'b h a f i j k l -> b h (a i j) (f k l)')
-        out = torch.softmax(out * self.softmax_scale, dim=-1)
-        return torch.einsum('bhsl,blhd->bshd', out, v), None
+        return monarch_attn(rope_q, lk, rq, rope_k, v, self.softmax_scale, torch.is_grad_enabled()), None
+
+        # out = torch.einsum('bhafjik,bhafkjl->bhafijkl', L, R)
+        # out = rearrange(out, 'b h a f i j k l -> b h (a i j) (f k l)')
+        # out = torch.softmax(out * self.softmax_scale, dim=-1)
+        # return torch.einsum('bhsl,blhd->bshd', out, v), None
