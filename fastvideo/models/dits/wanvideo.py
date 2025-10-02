@@ -1111,8 +1111,6 @@ class WanTransformer3DModel(CachableDiT):
 
         forward_context = get_forward_context()
         forward_batch = forward_context.forward_batch
-        current_timestep = forward_context.current_timestep
-        num_inference_steps = forward_batch.num_inference_steps
         # envs.RECORD_ENABLE = (current_timestep == envs.SELECTED_TIMESTEP) and not envs.IS_NEG_PROMPT
         if forward_batch is None or not forward_batch.enable_teacache:
             return False
@@ -1121,6 +1119,9 @@ class WanTransformer3DModel(CachableDiT):
         assert isinstance(
             teacache_params,
             WanTeaCacheParams), "teacache_params is not a WanTeaCacheParams"
+        
+        current_timestep = forward_context.current_timestep
+        num_inference_steps = forward_batch.num_inference_steps
 
         # initialize the coefficients, cutoff_steps, and ret_steps
         coefficients = teacache_params.coefficients
