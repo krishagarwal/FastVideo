@@ -14,14 +14,14 @@ fastvideo generate \
     --vae-cpu-offload False \
     --text-encoder-cpu-offload True \
     --pin-cpu-memory False \
-    --height 480 \
+    --height 448 \
     --width 832 \
     --num-frames 77 \
     --num-inference-steps 50 \
     --fps 16 \
     --guidance-scale 6.0 \
     --flow-shift 8.0 \
-    --prompt-txt assets/prompt.txt \
+    --prompt-txt $PROMPT_TXT \
     --negative-prompt "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards" \
     --seed 1024 \
     --output-path outputs_video/
