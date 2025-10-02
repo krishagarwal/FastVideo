@@ -2,7 +2,7 @@
 export FASTVIDEO_ATTENTION_BACKEND=MONARCH_ATTN
 
 # Configs
-MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+MODEL_PATH="krishagarwal/monarch-layer-distilled-wan-1.3b-diffusers"
 DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
 VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/validation_64.json
 # VALIDATION_DATASET_FILE=examples/training/finetune/wan_t2v_1.3B/crush_smol/validation.json
@@ -10,7 +10,7 @@ VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/valid
 # Training arguments
 training_args=(
   --tracker_project_name fastwan
-  --wandb_run_name wan_1.3b_t2v_monarch_max_constrain
+  --wandb_run_name wan_1.3b_t2v_monarch_max_constrain_layer_distill_init
   --output_dir "checkpoints/wan_1.3b_t2v_finetune_monarch_max_constrain"
   --max_train_steps 4000
   --train_batch_size 1
