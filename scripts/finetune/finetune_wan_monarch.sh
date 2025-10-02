@@ -2,7 +2,7 @@
 export FASTVIDEO_ATTENTION_BACKEND=MONARCH_ATTN
 
 # Configs
-MODEL_PATH="krishagarwal/monarch-layer-distilled-wan-1.3b-diffusers"
+MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
 DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
 VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/validation_64.json
 # VALIDATION_DATASET_FILE=examples/training/finetune/wan_t2v_1.3B/crush_smol/validation.json
@@ -79,7 +79,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 torchrun \
 --nproc_per_node 8 \
---rdzv-conf="timeout=3600,read_timeout=3600,join_timeout=3600" \
+--rdzv-conf="timeout=7200,read_timeout=7200,join_timeout=7200" \
     fastvideo/training/wan_training_pipeline.py \
     "${parallel_args[@]}" \
     "${model_args[@]}" \
