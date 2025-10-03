@@ -47,11 +47,21 @@ def my_filter(c):
 attn_fwd_configs = list(filter(my_filter, attn_fwd_configs))
 print(len(attn_fwd_configs), "configs for attn_fwd")
 
+# 50% sparse:
+# L40 config
+# attn_fwd_configs = [
+#     triton.Config({'BLOCK_I': 2, 'BLOCK_K': 16, 'BLOCK_J': 32, 'BLOCK_HD': 16}, num_stages=2, num_warps=4, pre_hook=_attn_fwd_pre_hook)
+# ]
+# H100 config
+# attn_fwd_configs = [
+#     triton.Config({'BLOCK_I': 2, 'BLOCK_K': 16, 'BLOCK_J': 32, 'BLOCK_HD': 128}, num_stages=4, num_warps=4, pre_hook=_attn_fwd_pre_hook)
+# ]
+
+# 95% sparse:
 # L40 config
 # attn_fwd_configs = [
 #     triton.Config({'BLOCK_I': 16, 'BLOCK_K': 16, 'BLOCK_J': 4, 'BLOCK_HD': 16}, num_stages=4, num_warps=4, pre_hook=_attn_fwd_pre_hook)
 # ]
-
 # H100 config
 attn_fwd_configs = [
     triton.Config({'BLOCK_I': 2, 'BLOCK_K': 16, 'BLOCK_J': 32, 'BLOCK_HD': 128}, num_stages=4, num_warps=4, pre_hook=_attn_fwd_pre_hook)
@@ -317,15 +327,25 @@ attn_bwd_configs = list(filter(my_filter, attn_bwd_configs))
 print(len(attn_bwd_configs), "configs for attn_bwd")
 # attn_bwd_configs = attn_bwd_configs[:1]
 
+# 50% sparse:
 # L40 config
 # attn_bwd_configs = [
 #     triton.Config({'BLOCK_I': 2, 'BLOCK_K': 32, 'BLOCK_J': 16}, num_stages=2, num_warps=4, pre_hook=_attn_bwd_pre_hook)
 # ]
-
 # H100 config
 attn_bwd_configs = [
-    triton.Config({'BLOCK_I': 1, 'BLOCK_K': 32, 'BLOCK_J': 16}, num_stages=3, num_warps=4, pre_hook=_attn_bwd_pre_hook)
+    triton.Config({'BLOCK_I': 2, 'BLOCK_K': 16, 'BLOCK_J': 16}, num_stages=3, num_warps=4, pre_hook=_attn_bwd_pre_hook)
 ]
+
+# 95% sparse:
+# L40 config
+# attn_bwd_configs = [
+#     triton.Config({'BLOCK_I': 2, 'BLOCK_K': 32, 'BLOCK_J': 16}, num_stages=2, num_warps=4, pre_hook=_attn_bwd_pre_hook)
+# ]
+# H100 config
+# attn_bwd_configs = [
+#     triton.Config({'BLOCK_I': 1, 'BLOCK_K': 32, 'BLOCK_J': 16}, num_stages=3, num_warps=4, pre_hook=_attn_bwd_pre_hook)
+# ]
 
 @triton.autotune(configs=attn_bwd_configs, key=["HEAD_DIM", "NUM_HEADS", "block_b1", "block_b2"])
 @triton.jit
