@@ -479,6 +479,7 @@ def _attn_bwd(sm_scale, bsz,
 
             dp_ijkl = tl.dot(do_ij, v_kl.T).reshape(BLOCK_I, BLOCK_J, BLOCK_K)
             ds_ijkl = (p_ijkl * (dp_ijkl - d_ij[:, :, None]) * sm_scale)
+            ds_ijkl = tl.where(ij_mask[:, :, None] & k_mask[None, None, :], ds_ijkl, 0.0)
 
             dl_jik_l = (ds_ijkl * R_kjl).reshape(BLOCK_I * BLOCK_J, BLOCK_K).to(dtype)
             dlq_ij_l = tl.dot(dl_jik_l, Lk_k).to(out_dtype) # (BLOCK_I * BLOCK_J, HEAD_DIM)
