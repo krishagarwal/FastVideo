@@ -5,13 +5,14 @@ from fastvideo.attention.backends.abstract import (AttentionBackend,
                                                    AttentionMetadataBuilder)
 from fastvideo.attention.layer import (DistributedAttention,
                                        DistributedAttention_VSA, LocalAttention,
-                                       MonarchAttention)
+                                       MonarchAttention, TrueMonarchAttention)
 from fastvideo.attention.selector import get_attn_backend
 
 __all__ = [
     "DistributedAttention",
     "LocalAttention",
     "MonarchAttention",
+    "TrueMonarchAttention",
     "DistributedAttention_VSA",
     "AttentionBackend",
     "AttentionMetadata",

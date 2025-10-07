@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     FASTVIDEO_SERVER_DEV_MODE: bool = False
     FASTVIDEO_STAGE_LOGGING: bool = False
     FASTVIDEO_MONARCH_USE_DYNAMIC: bool = False
+    FASTVIDEO_TRUE_MONARCH_NUM_ITERS: int = 1
     # CURR_PROMPT_DIR: int = 0
     # RECORD_ENABLE: bool = False
     # CURR_LAYER: int = 0
@@ -186,6 +187,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
 
     "FASTVIDEO_MONARCH_USE_DYNAMIC":
     lambda: bool(int(os.getenv("FASTVIDEO_MONARCH_USE_DYNAMIC", "0"))),
+
+    "FASTVIDEO_TRUE_MONARCH_NUM_ITERS":
+    lambda: int(os.getenv("FASTVIDEO_TRUE_MONARCH_NUM_ITERS", "1")),
 
     # Path to the attention configuration file. Only used for sliding tile
     # attention for now.

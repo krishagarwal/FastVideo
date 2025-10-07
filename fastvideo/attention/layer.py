@@ -426,6 +426,98 @@ class LocalAttention(nn.Module):
 #         out = torch.softmax(out * self.softmax_scale, dim=-1)
 #         return torch.einsum('bhsl,blhd->bshd', out, v), None
 
+class TrueMonarchAttention(nn.Module):
+
+    def __init__(self,
+                 num_heads: int,
+                 head_size: int,
+                 softmax_scale: float | None = None,
+                 causal: bool = False,
+                 num_iters: int = 1,
+                 prefix: str = "",
+                 **extra_impl_args) -> None:
+        super().__init__()
+        if softmax_scale is None:
+            self.softmax_scale = head_size**-0.5
+        else:
+            self.softmax_scale = softmax_scale
+        
+        dtype = get_compute_dtype()
+        self.norm_rq = RMSNorm(head_size, eps=1e-6, dtype=dtype)
+        self.norm_lk = RMSNorm(head_size, eps=1e-6, dtype=dtype)
+
+        assert not causal, "assuming non-causal for now"
+
+        dtype = get_compute_dtype()
+        self.num_heads = num_heads
+        self.head_size = head_size
+        self.dtype = dtype
+        self.num_iters = num_iters
+
+    def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
+        return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
+
+    def get_block_sizes(self, seq_len):
+        factors = [(i, seq_len // i) for i in range(1, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
+        # choose the pair closest to square where one factor is divisible by 52
+        remaining = [f for f in factors if f[0] % 52 == 0 or f[1] % 52 == 0]
+        assert len(remaining) > 0, "Cannot find block sizes divisible by 52"
+        factors = remaining[-1]
+        if factors[1] % 52 == 0:
+            return factors
+        else:
+            return (factors[1], factors[0])
+
+    # @torch.compiler.disable
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        eps: float = 1e-6,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Forward pass for distributed attention.
+        
+        Args:
+            q (torch.Tensor): Query tensor [batch_size, seq_len, num_heads, head_dim]
+            k (torch.Tensor): Key tensor [batch_size, seq_len, num_heads, head_dim]
+            v (torch.Tensor): Value tensor [batch_size, seq_len, num_heads, head_dim]
+            replicated_q (Optional[torch.Tensor]): Replicated query tensor, typically for text tokens
+            replicated_k (Optional[torch.Tensor]): Replicated key tensor
+            replicated_v (Optional[torch.Tensor]): Replicated value tensor
+            
+        Returns:
+            Tuple[torch.Tensor, Optional[torch.Tensor]]: A tuple containing:
+                - o (torch.Tensor): Output tensor after attention for the main sequence
+                - replicated_o (Optional[torch.Tensor]): Output tensor for replicated tokens, if provided
+        """
+        # Check text tokens are not supported for VSA now
+        assert q.dim() == 4 and k.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
+        # assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
+
+        batch_size = q.size(0)
+        block_b1, block_b2 = self.get_block_sizes(q.size(-3))
+
+        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
+        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
+
+        L = torch.eye(block_b1, device=q.device, dtype=q.dtype).view(1, 1, 1, block_b1, block_b1).expand(batch_size, q.size(-2), block_b2, block_b1, block_b1) # (b, h, j, k, i)
+
+        for _ in range(self.num_iters):
+            aR = torch.einsum("bhjki,bijhd->bkjhd", L, q)
+            bR = torch.einsum("bkjhd,bklhd->bhkjl", aR, k)
+            cR = torch.einsum("bhjki->bhkj", L).unsqueeze(-1)
+            R = torch.softmax(bR / (cR + eps), dim=-1)
+
+            aL = torch.einsum("bhkjl,bklhd->bjkhd", R, k)
+            bL = torch.einsum("bjkhd,bijhd->bhjki", aL, q)
+            cL = torch.einsum("bhkjl->bhjk", R * (R + eps).log()).unsqueeze(-1)
+            L = torch.softmax(bL - cL, dim=-2)
+        
+        v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
+        out = torch.einsum("bhkjl,bklhd->bjkhd", R, v)
+        out = torch.einsum("bhjki,bjkhd->bijhd", L, out)
+        return rearrange(out, 'b i j h d -> b (i j) h d'), None
 
 class MonarchAttention(nn.Module):
 
