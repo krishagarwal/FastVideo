@@ -443,8 +443,6 @@ class TrueMonarchAttention(nn.Module):
             self.softmax_scale = softmax_scale
         
         dtype = get_compute_dtype()
-        self.norm_rq = RMSNorm(head_size, eps=1e-6, dtype=dtype)
-        self.norm_lk = RMSNorm(head_size, eps=1e-6, dtype=dtype)
 
         assert not causal, "assuming non-causal for now"
 
@@ -498,7 +496,7 @@ class TrueMonarchAttention(nn.Module):
         batch_size = q.size(0)
         block_b1, block_b2 = self.get_block_sizes(q.size(-3))
 
-        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
+        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * self.softmax_scale # (b, i, j, h, d)
         k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
 
         L = torch.eye(block_b1, device=q.device, dtype=q.dtype).view(1, 1, 1, block_b1, block_b1).expand(batch_size, q.size(-2), block_b2, block_b1, block_b1) # (b, h, j, k, i)
@@ -511,7 +509,7 @@ class TrueMonarchAttention(nn.Module):
 
             aL = torch.einsum("bhkjl,bklhd->bjkhd", R, k)
             bL = torch.einsum("bjkhd,bijhd->bhjki", aL, q)
-            cL = torch.einsum("bhkjl->bhjk", R * (R + eps).log()).unsqueeze(-1)
+            cL = torch.einsum("bhkjl->bhjk", torch.xlogy(R, R)).unsqueeze(-1)
             L = torch.softmax(bL - cL, dim=-2)
         
         v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
