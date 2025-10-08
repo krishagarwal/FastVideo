@@ -34,9 +34,9 @@ spec:
                       - key: node.kubernetes.io/instance-type
                         operator: In
                         values:
-                          - p5en.48xlarge
+                          - p5.48xlarge
           tolerations:
-            - key: yadunanr-knowledge-stem-26-p5en
+            - key: yadunanr-knowledge-stem-26-p5
               operator: Equal
               value: "True"
               effect: NoSchedule
