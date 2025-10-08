@@ -793,6 +793,8 @@ class WanTransformerBlock_TrueMonarch(nn.Module):
 
         self.scale_shift_table = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
 
+        self.block_num = int(prefix.split('.')[-1])
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -845,7 +847,9 @@ class WanTransformerBlock_TrueMonarch(nn.Module):
         cos, sin = freqs_cis
         q, k = _apply_rotary_emb(q, cos, sin, is_neox_style=False), _apply_rotary_emb(k, cos, sin, is_neox_style=False)
 
-        attn_output, _ = self.attn1(q, k, v)
+        enable_monarch = get_forward_context().attn_metadata.num_layers_enabled > self.block_num
+
+        attn_output, _ = self.attn1(q, k, v, enable_monarch=enable_monarch)
         attn_output = attn_output.flatten(2)
         attn_output, _ = self.to_out(attn_output)
         attn_output = attn_output.squeeze(1)

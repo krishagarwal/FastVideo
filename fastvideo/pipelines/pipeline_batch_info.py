@@ -199,6 +199,8 @@ class TrainingBatch:
     current_timestep: int = 0
     current_vsa_sparsity: float = 0.0
 
+    current_sparse_layers_enabled: int = 0
+
     # Dataloader batch outputs
     latents: torch.Tensor | None = None
     raw_latent_shape: torch.Tensor | None = None

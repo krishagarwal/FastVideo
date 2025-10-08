@@ -21,6 +21,7 @@ from tqdm.auto import tqdm
 
 import fastvideo.envs as envs
 from fastvideo.attention.backends.video_sparse_attn import (
+    TrueMonarchAttentionMetadataBuilder,
     VideoSparseAttentionMetadataBuilder)
 from fastvideo.attention.backends.vmoba import VideoMobaAttentionMetadataBuilder
 from fastvideo.configs.sample import SamplingParam
@@ -262,9 +263,10 @@ class TrainingPipeline(LoRAPipeline, ABC):
         latents_shape = training_batch.raw_latent_shape
         patch_size = self.training_args.pipeline_config.dit_config.patch_size
         current_vsa_sparsity = training_batch.current_vsa_sparsity
+        current_sparse_layers_enabled = training_batch.current_sparse_layers_enabled
         assert latents_shape is not None
         assert training_batch.timesteps is not None
-        if (vsa_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VIDEO_SPARSE_ATTN") or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+        if (vsa_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VIDEO_SPARSE_ATTN"):
             training_batch.attn_metadata = VideoSparseAttentionMetadataBuilder(  # type: ignore
             ).build(  # type: ignore
                 raw_latent_shape=latents_shape[2:5],
@@ -272,6 +274,14 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 patch_size=patch_size,
                 VSA_sparsity=current_vsa_sparsity,
                 device=get_local_torch_device())
+        elif envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+            training_batch.attn_metadata = TrueMonarchAttentionMetadataBuilder().build(
+                current_timestep=training_batch.timesteps,
+                raw_latent_shape=latents_shape[2:5],
+                patch_size=patch_size,
+                target_sparsity=current_vsa_sparsity,
+                num_layers_enabled=current_sparse_layers_enabled,
+            )
         elif vmoba_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VMOBA_ATTN":
             moba_params = self.training_args.moba_config.copy()
             moba_params.update({
@@ -481,10 +491,15 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 current_vsa_sparsity = 0.0
             else:
                 current_vsa_sparsity = 0.0
+            
+            current_sparse_layers_enabled = 0
+            if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                current_sparse_layers_enabled = min((step // self.training_args.monarch_layer_enable_interval_steps) + 1, self.transformer.config.num_layers)
 
             training_batch = TrainingBatch()
             training_batch.current_timestep = step
             training_batch.current_vsa_sparsity = current_vsa_sparsity
+            training_batch.current_sparse_layers_enabled = current_sparse_layers_enabled
             training_batch = self.train_one_step(training_batch)
 
             loss = training_batch.total_loss
@@ -509,6 +524,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
                         "avg_step_time": avg_step_time,
                         "grad_norm": grad_norm,
                         "vsa_sparsity": current_vsa_sparsity,
+                        "sparse_layers_enabled": current_sparse_layers_enabled,
                     },
                     step=step,
                 )

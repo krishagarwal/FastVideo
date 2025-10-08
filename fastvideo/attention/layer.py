@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
+from fastvideo.attention.backends.video_sparse_attn import TrueMonarchAttentionMetadata
 from fastvideo.attention.selector import backend_name_to_enum, get_attn_backend
 from fastvideo.distributed.communication_op import (
     sequence_model_parallel_all_gather, sequence_model_parallel_all_to_all_4D)
@@ -455,11 +456,11 @@ class TrueMonarchAttention(nn.Module):
     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
-    def get_block_sizes(self, seq_len, target_sparsity=None):
+    def get_block_sizes(self, seq_len, h, w, target_sparsity=None):
         factors = [(i, seq_len // i) for i in range(2, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
-        # choose the pair closest to square where one factor is divisible by 52
-        remaining = [f for f in factors if f[0] % 52 == 0 or f[1] % 52 == 0]
-        assert len(remaining) > 0, "Cannot find block sizes divisible by 52"
+        # choose the pair closest to square where one factor is divisible by latent width
+        remaining = [f for f in factors if f[0] % w == 0 or f[1] % w == 0]
+        assert len(remaining) > 0, f"Cannot find block sizes divisible by latent width {w}"
         
         if target_sparsity is not None:
             sparsities = [1 - (f[0]*f[1]*f[1] + f[1]*f[0]*f[0])/(seq_len*seq_len) for f in remaining]
@@ -468,7 +469,7 @@ class TrueMonarchAttention(nn.Module):
             factors = remaining[min_idx]
         else:
             factors = remaining[-1] # highest sparsity
-        if factors[1] % 52 == 0:
+        if factors[1] % w == 0:
             return factors
         else:
             return (factors[1], factors[0])
@@ -479,6 +480,7 @@ class TrueMonarchAttention(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
+        enable_monarch: bool = True,
         eps: float = 1e-6,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Forward pass for distributed attention.
@@ -500,16 +502,24 @@ class TrueMonarchAttention(nn.Module):
         assert q.dim() == 4 and k.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
         # assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
 
+        if not enable_monarch:
+            return flash_attention(q, k, v, softmax_scale=self.softmax_scale, dtype=q.dtype), None
+
         batch_size = q.size(0)
         forward_context: ForwardContext = get_forward_context()
         ctx_attn_metadata = forward_context.attn_metadata
-        target_sparsity = None
-        if ctx_attn_metadata is not None and hasattr(ctx_attn_metadata, 'VSA_sparsity') and ctx_attn_metadata.VSA_sparsity is not None:
-            target_sparsity = ctx_attn_metadata.VSA_sparsity
-        block_b1, block_b2 = self.get_block_sizes(q.size(-3), target_sparsity=target_sparsity)
+        assert isinstance(ctx_attn_metadata, TrueMonarchAttentionMetadata)
+        target_sparsity = ctx_attn_metadata.target_sparsity
+        block_b1, block_b2 = self.get_block_sizes(
+            q.size(-3),
+            ctx_attn_metadata.dit_seq_shape[1],
+            ctx_attn_metadata.dit_seq_shape[2],
+            target_sparsity=target_sparsity
+        )
 
-        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * self.softmax_scale # (b, i, j, h, d)
-        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
+        sm_scale_sqrt = self.softmax_scale ** 0.5
+        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * sm_scale_sqrt # (b, i, j, h, d)
+        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * sm_scale_sqrt # (b, k, l, h, d)
 
         L = torch.eye(block_b1, device=q.device, dtype=q.dtype).view(1, 1, 1, block_b1, block_b1).expand(batch_size, q.size(-2), block_b2, block_b1, block_b1) # (b, h, j, k, i)
 

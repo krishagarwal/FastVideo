@@ -671,6 +671,8 @@ class TrainingArgs(FastVideoArgs):
     VSA_decay_rate: float = 0.01  # decay rate -> 0.02
     VSA_decay_interval_steps: int = 1  # decay interval steps -> 50
 
+    monarch_layer_enable_interval_steps: int = 1
+
     # LoRA training parameters
     lora_rank: int | None = None
     lora_alpha: int | None = None
@@ -993,6 +995,11 @@ class TrainingArgs(FastVideoArgs):
             type=int,
             default=TrainingArgs.VSA_decay_interval_steps,
             help="VSA decay interval steps")
+        parser.add_argument(
+            "--monarch-layer-enable-interval-steps",
+            type=int,
+            default=TrainingArgs.monarch_layer_enable_interval_steps,
+            help="Monarch layer enable interval steps")
         parser.add_argument("--lora-training",
                             action=StoreBoolean,
                             help="Whether to use LoRA training")

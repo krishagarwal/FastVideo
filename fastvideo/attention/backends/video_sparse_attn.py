@@ -148,6 +148,43 @@ class VideoSparseAttentionMetadata(AttentionMetadata):
     variable_block_sizes: torch.LongTensor
     non_pad_index: torch.LongTensor
 
+@dataclass
+class TrueMonarchAttentionMetadata(AttentionMetadata):
+    current_timestep: int
+    dit_seq_shape: list[int]
+    total_seq_length: int
+    target_sparsity: int
+    num_layers_enabled: int
+
+class TrueMonarchAttentionMetadataBuilder(AttentionMetadataBuilder):
+    def __init__(self):
+        pass
+
+    def prepare(self):
+        pass
+
+    def build(  # type: ignore
+        self,
+        current_timestep: int,
+        raw_latent_shape: tuple[int, int, int],
+        patch_size: tuple[int, int, int],
+        target_sparsity: int,
+        num_layers_enabled: int,
+        **kwargs: dict[str, Any],
+    ) -> TrueMonarchAttentionMetadata:
+        patch_size = patch_size
+        dit_seq_shape = (raw_latent_shape[0] // patch_size[0],
+                         raw_latent_shape[1] // patch_size[1],
+                         raw_latent_shape[2] // patch_size[2])
+
+        total_seq_length = math.prod(dit_seq_shape)
+
+        return TrueMonarchAttentionMetadata(
+            current_timestep=current_timestep,
+            dit_seq_shape=dit_seq_shape,  # type: ignore
+            total_seq_length=total_seq_length,  # type: ignore
+            target_sparsity=target_sparsity,  # type: ignore
+            num_layers_enabled=num_layers_enabled)  # type: ignore
 
 class VideoSparseAttentionMetadataBuilder(AttentionMetadataBuilder):
 

@@ -1,6 +1,7 @@
 import torch  # type: ignore
 
 from fastvideo import envs
+from fastvideo.attention.backends.video_sparse_attn import TrueMonarchAttentionMetadataBuilder
 from fastvideo.distributed import get_local_torch_device
 from fastvideo.fastvideo_args import FastVideoArgs
 from fastvideo.forward_context import set_forward_context
@@ -239,12 +240,8 @@ class CausalDMDDenosingStage(DenoisingStage):
                     t_expand = t_cur.repeat(latent_model_input.shape[0])
 
                     # Attention metadata if needed
-                    if (vsa_available and self.attn_backend
-                            == VideoSparseAttentionBackend) or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
-                        if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
-                            self.attn_metadata_builder_cls = VideoSparseAttentionBackend.get_builder_cls()
-                        else:
-                            self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls()
+                    if (vsa_available and self.attn_backend == VideoSparseAttentionBackend):
+                        self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls()
                         if self.attn_metadata_builder_cls is not None:
                             self.attn_metadata_builder = self.attn_metadata_builder_cls(
                             )
@@ -259,6 +256,20 @@ class CausalDMDDenosingStage(DenoisingStage):
                                 VSA_sparsity,  # type: ignore
                                 device=get_local_torch_device(),  # type: ignore
                             )  # type: ignore
+                            assert attn_metadata is not None, "attn_metadata cannot be None"
+                        else:
+                            attn_metadata = None
+                    elif envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                        self.attn_metadata_builder_cls = TrueMonarchAttentionMetadataBuilder
+                        if self.attn_metadata_builder_cls is not None:
+                            self.attn_metadata_builder = self.attn_metadata_builder_cls()
+                            attn_metadata = self.attn_metadata_builder.build(
+                                current_timestep=i,
+                                raw_latent_shape=(current_num_frames, h, w),
+                                patch_size=fastvideo_args.pipeline_config.dit_config.patch_size,
+                                target_sparsity=fastvideo_args.VSA_sparsity,
+                                num_layers_enabled=self.num_transformer_blocks,
+                            )
                             assert attn_metadata is not None, "attn_metadata cannot be None"
                         else:
                             attn_metadata = None
