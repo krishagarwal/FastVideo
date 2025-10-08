@@ -456,7 +456,7 @@ class TrueMonarchAttention(nn.Module):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
     def get_block_sizes(self, seq_len, target_sparsity=None):
-        factors = [(i, seq_len // i) for i in range(1, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
+        factors = [(i, seq_len // i) for i in range(2, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
         # choose the pair closest to square where one factor is divisible by 52
         remaining = [f for f in factors if f[0] % 52 == 0 or f[1] % 52 == 0]
         assert len(remaining) > 0, "Cannot find block sizes divisible by 52"
