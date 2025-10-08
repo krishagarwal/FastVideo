@@ -455,12 +455,19 @@ class TrueMonarchAttention(nn.Module):
     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
-    def get_block_sizes(self, seq_len):
+    def get_block_sizes(self, seq_len, target_sparsity=None):
         factors = [(i, seq_len // i) for i in range(1, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
         # choose the pair closest to square where one factor is divisible by 52
         remaining = [f for f in factors if f[0] % 52 == 0 or f[1] % 52 == 0]
         assert len(remaining) > 0, "Cannot find block sizes divisible by 52"
-        factors = remaining[-1]
+        
+        if target_sparsity is not None:
+            sparsities = [1 - (f[0]*f[1]*f[1] + f[1]*f[0]*f[0])/(seq_len*seq_len) for f in remaining]
+            dists = [abs(s - target_sparsity) for s in sparsities]
+            min_idx = dists.index(min(dists))
+            factors = remaining[min_idx]
+        else:
+            factors = remaining[-1] # highest sparsity
         if factors[1] % 52 == 0:
             return factors
         else:
@@ -494,10 +501,15 @@ class TrueMonarchAttention(nn.Module):
         # assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
 
         batch_size = q.size(0)
-        block_b1, block_b2 = self.get_block_sizes(q.size(-3))
+        forward_context: ForwardContext = get_forward_context()
+        ctx_attn_metadata = forward_context.attn_metadata
+        target_sparsity = None
+        if ctx_attn_metadata is not None and hasattr(ctx_attn_metadata, 'VSA_sparsity') and ctx_attn_metadata.VSA_sparsity is not None:
+            target_sparsity = ctx_attn_metadata.VSA_sparsity
+        block_b1, block_b2 = self.get_block_sizes(q.size(-3), target_sparsity=target_sparsity)
 
         q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * self.softmax_scale # (b, i, j, h, d)
-        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
+        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
 
         L = torch.eye(block_b1, device=q.device, dtype=q.dtype).view(1, 1, 1, block_b1, block_b1).expand(batch_size, q.size(-2), block_b2, block_b1, block_b1) # (b, h, j, k, i)
 

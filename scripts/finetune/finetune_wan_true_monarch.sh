@@ -72,6 +72,9 @@ miscellaneous_args=(
   --ema_start_step 0
   --flow_shift 1
   --seed 1000
+  --VSA_decay_rate 0.03
+  --VSA_decay_interval_steps 50
+  --VSA_sparsity 0.99
 )
 
 # cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace

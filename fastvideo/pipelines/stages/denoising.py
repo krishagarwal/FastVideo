@@ -15,6 +15,7 @@ from einops import rearrange
 from tqdm.auto import tqdm
 
 # from fastvideo import envs
+from fastvideo import envs
 from fastvideo.attention import get_attn_backend
 from fastvideo.configs.pipelines.base import STA_Mode
 from fastvideo.distributed import (get_local_torch_device, get_sp_parallel_rank,
@@ -329,9 +330,11 @@ class DenoisingStage(PipelineStage):
                     if (st_attn_available
                             and self.attn_backend == SlidingTileAttentionBackend
                         ) or (vsa_available and self.attn_backend
-                              == VideoSparseAttentionBackend):
-                        self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls(
-                        )
+                              == VideoSparseAttentionBackend) or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                        if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                            self.attn_metadata_builder_cls = VideoSparseAttentionBackend.get_builder_cls()
+                        else:
+                            self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls()
 
                         if self.attn_metadata_builder_cls is not None:
                             self.attn_metadata_builder = self.attn_metadata_builder_cls(
@@ -875,9 +878,11 @@ class DmdDenoisingStage(DenoisingStage):
                                     dtype=target_dtype,
                                     enabled=autocast_enabled):
                     if (vsa_available and self.attn_backend
-                            == VideoSparseAttentionBackend):
-                        self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls(
-                        )
+                            == VideoSparseAttentionBackend) or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                        if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                            self.attn_metadata_builder_cls = VideoSparseAttentionBackend.get_builder_cls()
+                        else:
+                            self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls()
 
                         if self.attn_metadata_builder_cls is not None:
                             self.attn_metadata_builder = self.attn_metadata_builder_cls(

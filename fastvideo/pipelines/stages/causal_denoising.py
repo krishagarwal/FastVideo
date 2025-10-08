@@ -1,5 +1,6 @@
 import torch  # type: ignore
 
+from fastvideo import envs
 from fastvideo.distributed import get_local_torch_device
 from fastvideo.fastvideo_args import FastVideoArgs
 from fastvideo.forward_context import set_forward_context
@@ -239,9 +240,11 @@ class CausalDMDDenosingStage(DenoisingStage):
 
                     # Attention metadata if needed
                     if (vsa_available and self.attn_backend
-                            == VideoSparseAttentionBackend):
-                        self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls(
-                        )
+                            == VideoSparseAttentionBackend) or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                        if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                            self.attn_metadata_builder_cls = VideoSparseAttentionBackend.get_builder_cls()
+                        else:
+                            self.attn_metadata_builder_cls = self.attn_backend.get_builder_cls()
                         if self.attn_metadata_builder_cls is not None:
                             self.attn_metadata_builder = self.attn_metadata_builder_cls(
                             )

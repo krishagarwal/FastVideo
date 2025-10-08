@@ -264,7 +264,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
         current_vsa_sparsity = training_batch.current_vsa_sparsity
         assert latents_shape is not None
         assert training_batch.timesteps is not None
-        if vsa_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VIDEO_SPARSE_ATTN":
+        if (vsa_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VIDEO_SPARSE_ATTN") or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
             training_batch.attn_metadata = VideoSparseAttentionMetadataBuilder(  # type: ignore
             ).build(  # type: ignore
                 raw_latent_shape=latents_shape[2:5],
@@ -310,7 +310,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
 
     def _transformer_forward_and_compute_loss(
             self, training_batch: TrainingBatch) -> TrainingBatch:
-        if vsa_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VIDEO_SPARSE_ATTN" or vmoba_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VMOBA_ATTN":
+        if (vsa_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VIDEO_SPARSE_ATTN" or vmoba_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VMOBA_ATTN") or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
             assert training_batch.attn_metadata is not None
         else:
             assert training_batch.attn_metadata is None
@@ -469,7 +469,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
         for step in range(self.init_steps + 1,
                           self.training_args.max_train_steps + 1):
             start_time = time.perf_counter()
-            if vsa_available:
+            if vsa_available or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
                 vsa_sparsity = self.training_args.VSA_sparsity
                 vsa_decay_rate = self.training_args.VSA_decay_rate
                 vsa_decay_interval_steps = self.training_args.VSA_decay_interval_steps
