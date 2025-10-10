@@ -427,6 +427,7 @@ class LocalAttention(nn.Module):
 #         out = torch.softmax(out * self.softmax_scale, dim=-1)
 #         return torch.einsum('bhsl,blhd->bshd', out, v), None
 
+from fastvideo.attention import true_monarch_attn
 class TrueMonarchAttention(nn.Module):
 
     def __init__(self,
@@ -462,7 +463,7 @@ class TrueMonarchAttention(nn.Module):
         remaining = [f for f in factors if f[0] % w == 0 or f[1] % w == 0]
         assert len(remaining) > 0, f"Cannot find block sizes divisible by latent width {w}"
         
-        if target_sparsity is not None:
+        if target_sparsity is not None and False: # ignore this for now
             sparsities = [1 - (f[0]*f[1]*f[1] + f[1]*f[0]*f[0])/(seq_len*seq_len) for f in remaining]
             dists = [abs(s - target_sparsity) for s in sparsities]
             min_idx = dists.index(min(dists))
@@ -517,26 +518,33 @@ class TrueMonarchAttention(nn.Module):
             target_sparsity=target_sparsity
         )
 
-        sm_scale_sqrt = self.softmax_scale ** 0.5
-        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * sm_scale_sqrt # (b, i, j, h, d)
-        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * sm_scale_sqrt # (b, k, l, h, d)
+        # sm_scale_sqrt = self.softmax_scale ** 0.5
+        # q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * sm_scale_sqrt # (b, i, j, h, d)
+        # k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) * sm_scale_sqrt # (b, k, l, h, d)
 
-        L = torch.eye(block_b1, device=q.device, dtype=q.dtype).view(1, 1, 1, block_b1, block_b1).expand(batch_size, q.size(-2), block_b2, block_b1, block_b1) # (b, h, j, k, i)
+        # L = torch.eye(block_b1, device=q.device, dtype=q.dtype).view(1, 1, 1, block_b1, block_b1).expand(batch_size, q.size(-2), block_b2, block_b1, block_b1) # (b, h, j, k, i)
 
-        for _ in range(self.num_iters):
-            aR = torch.einsum("bhjki,bijhd->bkjhd", L, q)
-            bR = torch.einsum("bkjhd,bklhd->bhkjl", aR, k)
-            cR = torch.einsum("bhjki->bhkj", L).unsqueeze(-1)
-            R = torch.softmax(bR / (cR + eps), dim=-1)
+        # for _ in range(self.num_iters):
+        #     aR = torch.einsum("bhjki,bijhd->bkjhd", L, q)
+        #     bR = torch.einsum("bkjhd,bklhd->bhkjl", aR, k)
+        #     cR = torch.einsum("bhjki->bhkj", L).unsqueeze(-1)
+        #     R = torch.softmax(bR / (cR + eps), dim=-1)
 
-            aL = torch.einsum("bhkjl,bklhd->bjkhd", R, k)
-            bL = torch.einsum("bjkhd,bijhd->bhjki", aL, q)
-            cL = torch.einsum("bhkjl->bhjk", torch.xlogy(R, R)).unsqueeze(-1)
-            L = torch.softmax(bL - cL, dim=-2)
+        #     aL = torch.einsum("bhkjl,bklhd->bjkhd", R, k)
+        #     bL = torch.einsum("bjkhd,bijhd->bhjki", aL, q)
+        #     cL = torch.einsum("bhkjl->bhjk", torch.xlogy(R, R)).unsqueeze(-1)
+        #     L = torch.softmax(bL - cL, dim=-2)
         
-        v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
-        out = torch.einsum("bhkjl,bklhd->bjkhd", R, v)
-        out = torch.einsum("bhjki,bjkhd->bijhd", L, out)
+        # v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
+        # out = torch.einsum("bhkjl,bklhd->bjkhd", R, v)
+        # out = torch.einsum("bhjki,bjkhd->bijhd", L, out)
+        # return rearrange(out, 'b i j h d -> b (i j) h d'), None
+
+        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
+        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
+        v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size)
+
+        out = true_monarch_attn.monarch_attn(q, k, v, self.softmax_scale, self.num_iters, eps)
         return rearrange(out, 'b i j h d -> b (i j) h d'), None
 
 class MonarchAttention(nn.Module):
