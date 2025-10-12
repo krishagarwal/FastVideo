@@ -542,7 +542,7 @@ class TrueMonarchAttention(nn.Module):
 
         q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
         k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
-        v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size)
+        v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
 
         out = true_monarch_attn.monarch_attn(q, k, v, self.softmax_scale, self.num_iters, eps)
         return rearrange(out, 'b i j h d -> b (i j) h d'), None
