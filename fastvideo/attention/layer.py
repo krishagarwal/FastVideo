@@ -17,7 +17,7 @@ from fastvideo.layers.rotary_embedding import _apply_rotary_emb
 from fastvideo.layers.linear import BatchedReplicatedLinear
 from fastvideo.attention.flash_attn import flash_attention
 from fastvideo.layers.layernorm import RMSNorm
-from fastvideo.attention.monarch_attn import monarch_attn
+# from fastvideo.attention.monarch_attn import monarch_attn
 import fastvideo.envs as envs
 import math
 
