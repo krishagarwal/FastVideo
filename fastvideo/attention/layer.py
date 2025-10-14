@@ -463,7 +463,7 @@ class TrueMonarchAttention(nn.Module):
         remaining = [f for f in factors if f[0] % w == 0 or f[1] % w == 0]
         assert len(remaining) > 0, f"Cannot find block sizes divisible by latent width {w}"
         
-        if target_sparsity is not None and False: # ignore this for now
+        if target_sparsity is not None: # ignore this for now
             sparsities = [1 - (f[0]*f[1]*f[1] + f[1]*f[0]*f[0])/(seq_len*seq_len) for f in remaining]
             dists = [abs(s - target_sparsity) for s in sparsities]
             min_idx = dists.index(min(dists))
