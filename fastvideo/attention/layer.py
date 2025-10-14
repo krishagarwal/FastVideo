@@ -458,7 +458,7 @@ class TrueMonarchAttention(nn.Module):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
     def get_block_sizes(self, seq_len, h, w, target_sparsity=None):
-        factors = [(i, seq_len // i) for i in range(4, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
+        factors = [(i, seq_len // i) for i in range(envs.FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
         # choose the pair closest to square where one factor is divisible by latent width
         remaining = [f for f in factors if f[0] % w == 0 or f[1] % w == 0]
         assert len(remaining) > 0, f"Cannot find block sizes divisible by latent width {w}"
