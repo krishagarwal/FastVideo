@@ -109,8 +109,7 @@ spec:
                   cd /code-fsx/beidchen-sandbox/FastVideo &&
                   pip install -e . &&
                   cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace &&
-                  export FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE=2 &&
-                  bash scripts/finetune/finetune_wan_true_monarch_fast.sh | tee /code-fsx/beidchen-sandbox/fastwan_true_monarch_fast.log
+                  bash scripts/finetune/finetune_wan_true_monarch_fast_less.sh | tee /code-fsx/beidchen-sandbox/fastwan_true_monarch_fast_h200.log
               image: 767397878797.dkr.ecr.us-east-1.amazonaws.com/agif-mm-pt-base:reasoning-vllm.sglang.megatron.deepseek.video.fa3
               imagePullPolicy: Always
               securityContext:
