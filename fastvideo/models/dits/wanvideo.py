@@ -743,6 +743,7 @@ class WanTransformerBlock_TrueMonarch(nn.Module):
             head_size=dim // num_heads,
             causal=False,
             num_iters=envs.FASTVIDEO_TRUE_MONARCH_NUM_ITERS,
+            min_block_size=envs.FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE,
             prefix=f"{prefix}.attn1"
         )
         self.hidden_dim = dim

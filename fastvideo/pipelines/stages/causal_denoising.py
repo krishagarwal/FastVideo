@@ -268,7 +268,7 @@ class CausalDMDDenosingStage(DenoisingStage):
                                 raw_latent_shape=(current_num_frames, h, w),
                                 patch_size=fastvideo_args.pipeline_config.dit_config.patch_size,
                                 target_sparsity=fastvideo_args.VSA_sparsity,
-                                num_layers_enabled=self.num_transformer_blocks,
+                                num_layers_enabled=fastvideo_args.sparse_layers_enabled,
                             )
                             assert attn_metadata is not None, "attn_metadata cannot be None"
                         else:

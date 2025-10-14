@@ -429,13 +429,13 @@ class LocalAttention(nn.Module):
 
 from fastvideo.attention import true_monarch_attn
 class TrueMonarchAttention(nn.Module):
-
     def __init__(self,
                  num_heads: int,
                  head_size: int,
                  softmax_scale: float | None = None,
                  causal: bool = False,
                  num_iters: int = 1,
+                 min_block_size: int = 1,
                  prefix: str = "",
                  **extra_impl_args) -> None:
         super().__init__()
@@ -453,18 +453,20 @@ class TrueMonarchAttention(nn.Module):
         self.head_size = head_size
         self.dtype = dtype
         self.num_iters = num_iters
+        self.min_block_size = min_block_size
 
     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
     def get_block_sizes(self, seq_len, h, w, target_sparsity=None):
-        factors = [(i, seq_len // i) for i in range(envs.FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE, math.floor(math.sqrt(seq_len)) + 1) if seq_len % i == 0]
+        frame_seq_len = h * w
+        factors = [(i, frame_seq_len // i) for i in range(self.min_block_size, math.floor(math.sqrt(frame_seq_len)) + 1) if frame_seq_len % i == 0]
         # choose the pair closest to square where one factor is divisible by latent width
         remaining = [f for f in factors if f[0] % w == 0 or f[1] % w == 0]
         assert len(remaining) > 0, f"Cannot find block sizes divisible by latent width {w}"
         
         if target_sparsity is not None: # ignore this for now
-            sparsities = [1 - (f[0]*f[1]*f[1] + f[1]*f[0]*f[0])/(seq_len*seq_len) for f in remaining]
+            sparsities = [1 - (f[0]*f[1]*f[1] + f[1]*f[0]*f[0])/(frame_seq_len*frame_seq_len) for f in remaining]
             dists = [abs(s - target_sparsity) for s in sparsities]
             min_idx = dists.index(min(dists))
             factors = remaining[min_idx]
@@ -540,12 +542,12 @@ class TrueMonarchAttention(nn.Module):
         # out = torch.einsum("bhjki,bjkhd->bijhd", L, out)
         # return rearrange(out, 'b i j h d -> b (i j) h d'), None
 
-        q = q.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, i, j, h, d)
-        k = k.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
-        v = v.view(batch_size, block_b1, block_b2, self.num_heads, self.head_size) # (b, k, l, h, d)
+        q = q.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size) # (b, f, i, j, h, d)
+        k = k.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size) # (b, f, k, l, h, d)
+        v = v.view(batch_size, -1, block_b1, block_b2, self.num_heads, self.head_size) # (b, f, k, l, h, d)
 
         out = true_monarch_attn.monarch_attn(q, k, v, self.softmax_scale, self.num_iters, eps)
-        return rearrange(out, 'b i j h d -> b (i j) h d'), None
+        return rearrange(out, 'b a i j h d -> b (a i j) h d'), None
 
 class MonarchAttention(nn.Module):
 

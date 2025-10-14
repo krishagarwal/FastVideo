@@ -193,7 +193,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     lambda: int(os.getenv("FASTVIDEO_TRUE_MONARCH_NUM_ITERS", "1")),
 
     "FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE":
-    lambda: int(os.getenv("FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE", "4")),
+    lambda: int(os.getenv("FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE", "1")),
 
     # Path to the attention configuration file. Only used for sliding tile
     # attention for now.

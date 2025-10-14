@@ -138,6 +138,7 @@ class FastVideoArgs:
 
     # VSA parameters
     VSA_sparsity: float = 0.0  # inference/validation sparsity
+    sparse_layers_enabled: int = 0
 
     # V-MoBA parameters
     moba_config_path: str | None = None
@@ -379,6 +380,13 @@ class FastVideoArgs:
             type=float,
             default=FastVideoArgs.VSA_sparsity,
             help="Validation sparsity for VSA",
+        )
+
+        parser.add_argument(
+            "--sparse-layers-enabled",
+            type=int,
+            default=FastVideoArgs.sparse_layers_enabled,
+            help="Number of transformer layers to enable sparsity",
         )
 
         # Master port for distributed training/inference

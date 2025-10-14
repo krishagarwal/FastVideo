@@ -361,7 +361,7 @@ class DenoisingStage(PipelineStage):
                                 raw_latent_shape=batch.raw_latent_shape[2:5],
                                 patch_size=fastvideo_args.pipeline_config.dit_config.patch_size,
                                 target_sparsity=fastvideo_args.VSA_sparsity,
-                                num_layers_enabled=self.transformer.config.num_layers,
+                                num_layers_enabled=fastvideo_args.sparse_layers_enabled,
                             )
                             assert attn_metadata is not None, "attn_metadata cannot be None"
                         else:
@@ -918,7 +918,7 @@ class DmdDenoisingStage(DenoisingStage):
                                 raw_latent_shape=batch.raw_latent_shape[2:5],
                                 patch_size=fastvideo_args.pipeline_config.dit_config.patch_size,
                                 target_sparsity=fastvideo_args.VSA_sparsity,
-                                num_layers_enabled=self.transformer.config.num_layers,
+                                num_layers_enabled=fastvideo_args.sparse_layers_enabled,
                             )
                             assert attn_metadata is not None, "attn_metadata cannot be None"
                         else:
