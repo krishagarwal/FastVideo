@@ -493,12 +493,12 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 current_vsa_sparsity = 0.0
             else:
                 current_vsa_sparsity = 0.0
-            self.training_args.VSA_sparsity = current_vsa_sparsity
+            # self.training_args.VSA_sparsity = current_vsa_sparsity
             
             current_sparse_layers_enabled = 0
             if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
                 current_sparse_layers_enabled = min((step // self.training_args.monarch_layer_enable_interval_steps) + 1, self.transformer.config.num_layers)
-            self.training_args.sparse_layers_enabled = current_sparse_layers_enabled
+            # self.training_args.sparse_layers_enabled = current_sparse_layers_enabled
 
             training_batch = TrainingBatch()
             training_batch.current_timestep = step

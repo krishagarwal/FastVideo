@@ -75,7 +75,7 @@ miscellaneous_args=(
   --seed 1000
   --VSA_decay_rate 0.03
   --VSA_decay_interval_steps 50
-  --VSA_sparsity 0.99
+  --VSA_sparsity 0.85
   --monarch_layer_enable_interval_steps 50
 )
 
