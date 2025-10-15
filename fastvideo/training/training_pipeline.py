@@ -463,13 +463,13 @@ class TrainingPipeline(LoRAPipeline, ABC):
 
         step_times: deque[float] = deque(maxlen=100)
 
+        self.training_args.sparse_layers_enabled = self.transformer.config.num_layers
+
         self._log_training_info()
 
         self._log_validation(self.transformer, self.training_args,
                              self.init_steps)
-        
-        final_vsa_sparsity = self.training_args.VSA_sparsity
-
+                
         # Train!
         progress_bar = tqdm(
             range(0, self.training_args.max_train_steps),
@@ -482,7 +482,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
                           self.training_args.max_train_steps + 1):
             start_time = time.perf_counter()
             if vsa_available or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
-                vsa_sparsity = final_vsa_sparsity
+                vsa_sparsity = self.training_args.VSA_sparsity
                 vsa_decay_rate = self.training_args.VSA_decay_rate
                 vsa_decay_interval_steps = self.training_args.VSA_decay_interval_steps
                 current_decay_times = min(step // vsa_decay_interval_steps,
