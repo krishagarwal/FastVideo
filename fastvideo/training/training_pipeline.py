@@ -485,9 +485,12 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 vsa_sparsity = self.training_args.VSA_sparsity
                 vsa_decay_rate = self.training_args.VSA_decay_rate
                 vsa_decay_interval_steps = self.training_args.VSA_decay_interval_steps
-                current_decay_times = min(step // vsa_decay_interval_steps,
-                                          vsa_sparsity // vsa_decay_rate)
-                current_vsa_sparsity = current_decay_times * vsa_decay_rate
+                if vsa_decay_interval_steps == 0:
+                    current_vsa_sparsity = vsa_sparsity
+                else:
+                    current_decay_times = min(step // vsa_decay_interval_steps,
+                                            vsa_sparsity // vsa_decay_rate)
+                    current_vsa_sparsity = current_decay_times * vsa_decay_rate
             elif vmoba_available:
                 # TODO: add vmoba sparsity scheduling here
                 current_vsa_sparsity = 0.0
