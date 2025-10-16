@@ -458,7 +458,7 @@ class TrueMonarchAttention(nn.Module):
     def rot_emb_flat_unflat(self, x, cos, sin, is_neox_style):
         return _apply_rotary_emb(x, cos, sin, is_neox_style=is_neox_style)
 
-    def get_block_sizes(self, seq_len, h, w, target_sparsity=None):
+    def get_block_sizes_old(self, seq_len, h, w, target_sparsity=None):
         frame_seq_len = h * w
         factors = [(i, frame_seq_len // i) for i in range(self.min_block_size, math.floor(math.sqrt(frame_seq_len)) + 1) if frame_seq_len % i == 0]
         # choose the pair closest to square where one factor is divisible by latent width
@@ -476,6 +476,16 @@ class TrueMonarchAttention(nn.Module):
             return factors
         else:
             return (factors[1], factors[0])
+
+    def get_block_sizes(self, seq_len, h, w, target_sparsity=None):
+        if target_sparsity is None:
+            return (h, w) # max sparsity
+        factors = [h // i for i in range(self.min_block_size, math.floor(math.sqrt(h)) + 1) if h % i == 0]
+        assert len(factors) > 0, f"Cannot find usable block sizes with min block size {self.min_block_size}"
+        sparsities = [1 - (f*f*w + w*w*f)/(f*f*w*w) for f in factors]
+        dists = [abs(s - target_sparsity) for s in sparsities]
+        min_idx = dists.index(min(dists))
+        return (factors[min_idx], w)
 
     # @torch.compiler.disable
     def forward(
