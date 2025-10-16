@@ -74,8 +74,8 @@ miscellaneous_args=(
   --flow_shift 1
   --seed 1000
   --VSA_decay_rate 0.03
-  --VSA_decay_interval_steps 50
-  --VSA_sparsity 0.85
+  --VSA_decay_interval_steps 0
+  --VSA_sparsity 0.94
   --monarch_layer_enable_interval_steps 50
 )
 

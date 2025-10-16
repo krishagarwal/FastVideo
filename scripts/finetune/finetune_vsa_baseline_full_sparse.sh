@@ -75,7 +75,7 @@ miscellaneous_args=(
 vsa_args=(
   --VSA_decay_rate 0.3
   --VSA_decay_interval_steps 0
-  --VSA_sparsity 0.85
+  --VSA_sparsity 0.94
 )
 
 export HF_HOME="/workspace"
