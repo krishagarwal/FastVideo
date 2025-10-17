@@ -76,7 +76,7 @@ miscellaneous_args=(
   --VSA_decay_rate 0.03
   --VSA_decay_interval_steps 0
   --VSA_sparsity 0.80
-  --monarch_layer_enable_interval_steps 50
+  --monarch_layer_enable_interval_steps 0
 )
 
 # cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace

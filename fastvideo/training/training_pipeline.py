@@ -351,11 +351,19 @@ class TrainingPipeline(LoRAPipeline, ABC):
             loss.backward()
             avg_loss = loss.detach().clone()
 
+            stats = {
+                "model_pred_min": model_pred.min().detach().clone(),
+                "model_pred_max": model_pred.max().detach().clone(),
+                "model_pred_mean": model_pred.mean().detach().clone(),
+                "model_pred_std": model_pred.std().detach().clone(),
+            }
+
         # logger.info(f"rank: {self.rank}, avg_loss: {avg_loss.item()}",
         #             local_main_process_only=False)
         world_group = get_world_group()
         world_group.all_reduce(avg_loss, op=dist.ReduceOp.AVG)
         training_batch.total_loss += avg_loss.item()
+        training_batch.model_pred_stats = { k : v.item() for k, v in stats.items() } # setting stats like this assumes 1 grad accum step
 
         return training_batch
 
@@ -496,12 +504,13 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 current_vsa_sparsity = 0.0
             else:
                 current_vsa_sparsity = 0.0
-            # self.training_args.VSA_sparsity = current_vsa_sparsity
             
             current_sparse_layers_enabled = 0
             if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
-                current_sparse_layers_enabled = min((step // self.training_args.monarch_layer_enable_interval_steps) + 1, self.transformer.config.num_layers)
-            # self.training_args.sparse_layers_enabled = current_sparse_layers_enabled
+                if self.training_args.monarch_layer_enable_interval_steps == 0:
+                    current_sparse_layers_enabled = self.transformer.config.num_layers
+                else:
+                    current_sparse_layers_enabled = min((step // self.training_args.monarch_layer_enable_interval_steps) + 1, self.transformer.config.num_layers)
 
             training_batch = TrainingBatch()
             training_batch.current_timestep = step
@@ -515,6 +524,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
             step_time = time.perf_counter() - start_time
             step_times.append(step_time)
             avg_step_time = sum(step_times) / len(step_times)
+            model_pred_stats = training_batch.model_pred_stats
 
             progress_bar.set_postfix({
                 "loss": f"{loss:.4f}",
@@ -532,7 +542,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
                         "grad_norm": grad_norm,
                         "vsa_sparsity": current_vsa_sparsity,
                         "sparse_layers_enabled": current_sparse_layers_enabled,
-                    },
+                    } | model_pred_stats,
                     step=step,
                 )
             if step % self.training_args.checkpointing_steps == 0:

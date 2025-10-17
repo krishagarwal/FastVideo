@@ -515,14 +515,14 @@ class TrueMonarchAttention(nn.Module):
         assert q.dim() == 4 and k.dim() == 4 and v.dim() == 4, "Expected 4D tensor"
         # assert get_sp_world_size() == 1, "Monarch attention does not support sequence parallelism for now"
 
-        if not enable_monarch:
-            return flash_attention(q, k, v, softmax_scale=self.softmax_scale, dtype=q.dtype), None
-
         batch_size = q.size(0)
         forward_context: ForwardContext = get_forward_context()
         ctx_attn_metadata = forward_context.attn_metadata
         assert isinstance(ctx_attn_metadata, TrueMonarchAttentionMetadata)
         target_sparsity = ctx_attn_metadata.target_sparsity
+        if not enable_monarch or (target_sparsity is not None and target_sparsity == 0.0):
+            return flash_attention(q, k, v, softmax_scale=self.softmax_scale, dtype=q.dtype), None
+
         block_b1, block_b2 = self.get_block_sizes(
             q.size(-3),
             ctx_attn_metadata.dit_seq_shape[1],

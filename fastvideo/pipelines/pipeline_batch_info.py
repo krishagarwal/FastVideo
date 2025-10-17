@@ -237,6 +237,9 @@ class TrainingBatch:
     total_loss: float | None = None
     grad_norm: float | None = None
 
+    # Stats
+    model_pred_stats: dict[str, float] = field(default_factory=dict)
+
     # Distillation-specific attributes
     encoder_hidden_states_neg: torch.Tensor | None = None
     encoder_attention_mask_neg: torch.Tensor | None = None

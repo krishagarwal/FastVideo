@@ -40,6 +40,7 @@ from fastvideo.training.training_utils import (
     get_scheduler, load_distillation_checkpoint, save_distillation_checkpoint,
     shift_timestep)
 from fastvideo.utils import is_vsa_available, set_random_seed
+from fastvideo.attention.backends.video_sparse_attn import TrueMonarchAttentionMetadata
 
 import wandb  # isort: skip
 
@@ -553,7 +554,10 @@ class DistillationPipeline(TrainingPipeline):
             batch = self._build_attention_metadata(batch)
             batch.attn_metadata_vsa = copy.deepcopy(batch.attn_metadata)
             if batch.attn_metadata is not None:
-                batch.attn_metadata.VSA_sparsity = 0.0  # type: ignore
+                if isinstance(batch.attn_metadata, TrueMonarchAttentionMetadata):
+                    batch.attn_metadata.target_sparsity = 0.0
+                else:
+                    batch.attn_metadata.VSA_sparsity = 0.0  # type: ignore
             batches.append(batch)
 
         self.optimizer.zero_grad()
@@ -939,7 +943,7 @@ class DistillationPipeline(TrainingPipeline):
         for step in range(self.init_steps + 1,
                           self.training_args.max_train_steps + 1):
             start_time = time.perf_counter()
-            if use_vsa:
+            if use_vsa or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
                 vsa_sparsity = self.training_args.VSA_sparsity
                 vsa_decay_rate = self.training_args.VSA_decay_rate
                 vsa_decay_interval_steps = self.training_args.VSA_decay_interval_steps
@@ -951,10 +955,18 @@ class DistillationPipeline(TrainingPipeline):
                     current_vsa_sparsity = vsa_sparsity
             else:
                 current_vsa_sparsity = 0.0
+            
+            current_sparse_layers_enabled = 0
+            if envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
+                if self.training_args.monarch_layer_enable_interval_steps == 0:
+                    current_sparse_layers_enabled = self.transformer.config.num_layers
+                else:
+                    current_sparse_layers_enabled = min((step // self.training_args.monarch_layer_enable_interval_steps) + 1, self.transformer.config.num_layers)
 
             training_batch = TrainingBatch()
             self.current_trainstep = step
             training_batch.current_vsa_sparsity = current_vsa_sparsity
+            training_batch.current_sparse_layers_enabled = current_sparse_layers_enabled
 
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 training_batch = self.train_one_step(training_batch)
@@ -998,7 +1010,7 @@ class DistillationPipeline(TrainingPipeline):
                 # Only log generator loss when generator is actually trained
                 if (step % self.generator_update_interval == 0):
                     log_data["train_generator_loss"] = generator_loss
-                if use_vsa:
+                if use_vsa or envs.FASTVIDEO_ATTENTION_BACKEND == "TRUE_MONARCH_ATTN":
                     log_data["VSA_train_sparsity"] = current_vsa_sparsity
 
                 if training_batch.dmd_latent_vis_dict:
