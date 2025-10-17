@@ -212,7 +212,7 @@ class BatchedReplicatedLinear(torch.nn.Module):
         # Per-batch weights: (bsz, out, in)
         self.weight = Parameter(
             torch.empty(batch_size, output_size, input_size, dtype=params_dtype),
-            requires_grad=True,
+            requires_grad=False,
         )
         # Tag axes so loaders (and any generic utilities) know what’s what:
         # weight[b, out, in]  -> batch_dim=0, output_dim=1, input_dim=2
@@ -227,7 +227,7 @@ class BatchedReplicatedLinear(torch.nn.Module):
             # Per-batch bias: (bsz, out)
             self.bias = Parameter(
                 torch.empty(batch_size, output_size, dtype=params_dtype),
-                requires_grad=True,
+                requires_grad=False,
             )
             # bias[b, out] -> batch_dim=0, output_dim=1
             set_weight_attrs(self.bias, {
