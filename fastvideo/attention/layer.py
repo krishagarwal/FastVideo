@@ -480,7 +480,7 @@ class TrueMonarchAttention(nn.Module):
     def get_block_sizes(self, seq_len, h, w, target_sparsity=None):
         if target_sparsity is None:
             return (h, w) # max sparsity
-        factors = [h // i for i in range(self.min_block_size, math.floor(math.sqrt(h)) + 1) if h % i == 0]
+        factors = [i for i in range(self.min_block_size, h + 1) if h % i == 0]
         assert len(factors) > 0, f"Cannot find usable block sizes with min block size {self.min_block_size}"
         sparsities = [1 - (f*f*w + w*w*f)/(f*f*w*w) for f in factors]
         dists = [abs(s - target_sparsity) for s in sparsities]
