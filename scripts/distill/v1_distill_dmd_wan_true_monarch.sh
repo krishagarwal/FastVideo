@@ -17,6 +17,7 @@ torchrun \
     fastvideo/training/wan_distillation_pipeline.py \
     --model_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
     --inference_mode False\
+    --wandb_run_name wan_1.3b_t2v_true_monarch_attn_8_iter_dmd\
     --pretrained_model_name_or_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
     --data_path "$DATA_DIR" \
     --validation_dataset_file  "$VALIDATION_DIR" \

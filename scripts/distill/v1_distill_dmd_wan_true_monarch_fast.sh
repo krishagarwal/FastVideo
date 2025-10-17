@@ -18,6 +18,7 @@ torchrun \
     --model_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
     --inference_mode False\
     --pretrained_model_name_or_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
+    --wandb_run_name wan_1.3b_t2v_true_monarch_attn_8_iter_dmd\
     --data_path "$DATA_DIR" \
     --validation_dataset_file  "$VALIDATION_DIR" \
     --train_batch_size 1 \
