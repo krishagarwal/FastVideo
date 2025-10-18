@@ -239,6 +239,7 @@ class TrainingBatch:
 
     # Stats
     model_pred_stats: dict[str, float] = field(default_factory=dict)
+    param_grad_norms: dict[str, float] = field(default_factory=dict)
 
     # Distillation-specific attributes
     encoder_hidden_states_neg: torch.Tensor | None = None
