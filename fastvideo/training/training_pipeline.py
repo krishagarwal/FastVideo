@@ -42,7 +42,7 @@ from fastvideo.training.training_utils import (
     clip_grad_norm_while_handling_failing_dtensor_cases,
     compute_density_for_timestep_sampling, count_trainable, get_scheduler,
     get_sigmas, load_checkpoint, normalize_dit_input, save_checkpoint,
-    shard_latents_across_sp)
+    shard_latents_across_sp, get_grad_norm_by_name)
 from fastvideo.utils import (is_vmoba_available, is_vsa_available,
                              set_random_seed, shallow_asdict)
 
@@ -354,6 +354,8 @@ class TrainingPipeline(LoRAPipeline, ABC):
             stats = {
                 "model_pred_min": model_pred.min().detach().clone(),
                 "model_pred_max": model_pred.max().detach().clone(),
+                "model_pred_abs_min": model_pred.abs().min().detach().clone(),
+                "model_pred_abs_max": model_pred.abs().max().detach().clone(),
                 "model_pred_mean": model_pred.mean().detach().clone(),
                 "model_pred_std": model_pred.std().detach().clone(),
             }
@@ -369,6 +371,9 @@ class TrainingPipeline(LoRAPipeline, ABC):
 
     def _clip_grad_norm(self, training_batch: TrainingBatch) -> TrainingBatch:
         max_grad_norm = self.training_args.max_grad_norm
+
+        param_grad_norms = get_grad_norm_by_name(self.transformer.named_parameters())
+        training_batch.param_grad_norms = { f"{k} grad norm" : v.item() for k, v in param_grad_norms.items() }
 
         # TODO(will): perhaps move this into transformer api so that we can do
         # the following:
@@ -525,6 +530,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
             step_times.append(step_time)
             avg_step_time = sum(step_times) / len(step_times)
             model_pred_stats = training_batch.model_pred_stats
+            param_grad_norms = training_batch.param_grad_norms
 
             progress_bar.set_postfix({
                 "loss": f"{loss:.4f}",
@@ -542,7 +548,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
                         "grad_norm": grad_norm,
                         "vsa_sparsity": current_vsa_sparsity,
                         "sparse_layers_enabled": current_sparse_layers_enabled,
-                    } | model_pred_stats,
+                    } | model_pred_stats | param_grad_norms,
                     step=step,
                 )
             if step % self.training_args.checkpointing_steps == 0:

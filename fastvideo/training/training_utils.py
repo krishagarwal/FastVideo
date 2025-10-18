@@ -546,6 +546,19 @@ def shard_latents_across_sp(latents: torch.Tensor,
         latents = latents[:, :, rank_in_sp_group, :, :, :]
     return latents
 
+def get_grad_norm_by_name(
+    named_parameters: Iterator[tuple[str, torch.Tensor]],
+    norm_type: float = 2.0,
+    error_if_nonfinite: bool = False,
+) -> dict[str, torch.Tensor]:
+    ret = {}
+    for name, param in named_parameters:
+        if param.grad is not None:
+            grad_norm = _get_total_norm(param.grad, norm_type, error_if_nonfinite)
+            if isinstance(grad_norm, torch.distributed.tensor.DTensor):
+                grad_norm = grad_norm.full_tensor()
+            ret[name] = grad_norm
+    return ret
 
 def clip_grad_norm_while_handling_failing_dtensor_cases(
     parameters: torch.Tensor | list[torch.Tensor],
