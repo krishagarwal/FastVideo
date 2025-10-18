@@ -63,3 +63,4 @@ torchrun \
     --VSA_decay_interval_steps 0 \
     --VSA_sparsity 0.95 \
     --monarch_layer_enable_interval_steps 0 \
+    --enable_gradient_checkpointing_type "full"
