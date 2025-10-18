@@ -47,7 +47,7 @@ spec:
                 - name: PYTHONUNBUFFERED
                   value: "1"
                 - name: FI_EFA_USE_DEVICE_RDMA
-                  value: '0'
+                  value: '1'
                 - name: FI_PROVIDER
                   value: efa
                 - name: NCCL_ASYNC_ERROR_HANDLING
@@ -90,7 +90,6 @@ spec:
                   export NCCL_NET=OFI &&
                   export FI_PROVIDER=efa &&
                   export FI_EFA_ENABLE_SHM_TRANSFER=1 &&
-                  export FI_EFA_USE_DEVICE_RDMA=0 &&
                   export NCCL_IB_DISABLE=1  &&
                   ulimit -l unlimited &&
                   unset NCCL_SOCKET_IFNAME &&
