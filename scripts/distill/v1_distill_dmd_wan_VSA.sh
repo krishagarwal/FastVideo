@@ -1,34 +1,35 @@
-export WANDB_BASE_URL="https://api.wandb.ai"
-export WANDB_MODE=offline
-export WANDB_API_KEY=
-export TRITON_CACHE_DIR=/tmp/triton_cache
-DATA_DIR=mini_i2v_dataset/crush-smol_preprocessed/combined_parquet_dataset/
-VALIDATION_DIR=mini_i2v_dataset/crush-smol_raw/validation.json
+DATA_DIR=/checkpoint-fsx/beidchen-sandbox/video/wan-syn/test/
+VALIDATION_DIR=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/validation_64.json
 NUM_GPUS=8
 export FASTVIDEO_ATTENTION_BACKEND=VIDEO_SPARSE_ATTN
 export TOKENIZERS_PARALLELISM=false
 
+export HF_HOME="/workspace"
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # Train generator with VSA
 # Make sure that num_latent_t is a multiple of sp_size
-torchrun --nnodes 1 --nproc_per_node $NUM_GPUS \
+torchrun \
+--nproc_per_node 8 \
+--rdzv-conf="timeout=7200,read_timeout=7200,join_timeout=7200" \
     fastvideo/training/wan_distillation_pipeline.py \
     --model_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
     --inference_mode False\
+    --wandb_run_name wan_1.3b_t2v_vsa_dmd\
     --pretrained_model_name_or_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
-    --cache_dir "/home/ray/.cache" \
     --data_path "$DATA_DIR" \
     --validation_dataset_file  "$VALIDATION_DIR" \
     --train_batch_size 1 \
-    --num_latent_t 16 \
+    --num_latent_t 20 \
     --sp_size 1 \
     --tp_size 1 \
-    --num_gpus $NUM_GPUS \
-    --hsdp_replicate_dim $NUM_GPUS  \
+    --num_gpus 64 \
+    --hsdp_replicate_dim 64 \
     --hsdp-shard-dim 1 \
     --train_sp_batch_size 1 \
-    --dataloader_num_workers 0 \
-    --gradient_accumulation_steps 8 \
-    --max_train_steps 30000 \
+    --dataloader_num_workers 4 \
+    --gradient_accumulation_steps 1 \
+    --max_train_steps 4000 \
     --learning_rate 1e-5 \
     --mixed_precision "bf16" \
     --checkpointing_steps 400 \
@@ -38,11 +39,11 @@ torchrun --nnodes 1 --nproc_per_node $NUM_GPUS \
     --checkpoints_total_limit 3 \
     --ema_start_step 0 \
     --training_cfg_rate 0.0 \
-    --output_dir "outputs_dmd/wan_finetune" \
-    --tracker_project_name Wan_distillation \
+    --output_dir "checkpoints/wan_1.3b_t2v_vsa_dmd" \
+    --tracker_project_name fastwan \
     --num_height 448 \
     --num_width 832 \
-    --num_frames 61 \
+    --num_frames 77 \
     --flow_shift 8 \
     --validation_guidance_scale "6.0" \
     --master_weight_type "fp32" \
@@ -56,4 +57,10 @@ torchrun --nnodes 1 --nproc_per_node $NUM_GPUS \
     --max_timestep_ratio 0.98 \
     --real_score_guidance_scale 3.5 \
     --seed 1024 \
-    --VSA_sparsity 0.8 
+    --VSA_decay_rate 0.03 \
+    --VSA_decay_interval_steps 50 \
+    --VSA_sparsity 0.95 \
+    --enable_gradient_checkpointing_type "full" \
+    --training_state_checkpointing_steps 500 \
+    --weight_only_checkpointing_steps 200
+
