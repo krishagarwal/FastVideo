@@ -1032,9 +1032,6 @@ class DistillationPipeline(TrainingPipeline):
                 log_data.update(faker_score_additional_logs)
 
                 wandb.log(log_data, step=step)
-            
-            if self.training_args.training_state_checkpointing_steps is None:
-                self.training_args.training_state_checkpointing_steps = 500
 
             # Save training state checkpoint (for resuming training)
             if (self.training_args.training_state_checkpointing_steps > 0
@@ -1053,9 +1050,6 @@ class DistillationPipeline(TrainingPipeline):
                     self.transformer.train()
                 self.sp_group.barrier()
             
-            if self.training_args.weight_only_checkpointing_steps is None:
-                self.training_args.weight_only_checkpointing_steps = 200
-
             # Save weight-only checkpoint
             if (self.training_args.weight_only_checkpointing_steps > 0
                     and step %

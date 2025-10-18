@@ -31,7 +31,7 @@ torchrun \
     --train_sp_batch_size 1 \
     --dataloader_num_workers 4 \
     --gradient_accumulation_steps 1 \
-    --max_train_steps 30000 \
+    --max_train_steps 4000 \
     --learning_rate 1e-5 \
     --mixed_precision "bf16" \
     --checkpointing_steps 400 \
