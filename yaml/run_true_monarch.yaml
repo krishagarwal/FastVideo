@@ -1,7 +1,7 @@
 apiVersion: "kubeflow.org/v1"
 kind: PyTorchJob
 metadata:
-  name: beidchen-train-fastwan-true-monarch-slow-implicit-17 # JOB_NAME like  <alias>-<pod/mpijob/torchjob>-<p4/g5/r5>-<project>-<task>[-<note>]
+  name: beidchen-train-fastwan-true-monarch-slow-implicit-18 # JOB_NAME like  <alias>-<pod/mpijob/torchjob>-<p4/g5/r5>-<project>-<task>[-<note>]
   namespace: default
 spec:
   elasticPolicy:
@@ -10,7 +10,7 @@ spec:
     maxReplicas: 8
     maxRestarts: 8
     nProcPerNode: &gpus_per_node 8
-    rdzvId: beidchen-train-fastwan-true-monarch-slow-implicit-17
+    rdzvId: beidchen-train-fastwan-true-monarch-slow-implicit-18
   runPolicy:
     ttlSecondsAfterFinished: 180 # give enough time to push any logs
     schedulingPolicy:
@@ -34,9 +34,9 @@ spec:
                       - key: node.kubernetes.io/instance-type
                         operator: In
                         values:
-                          - p5.48xlarge
+                          - p5en.48xlarge
           tolerations:
-            - key: shobhvas-runtime
+            - key: ikiss-swe-skills
               operator: Equal
               value: "True"
               effect: NoSchedule
@@ -47,7 +47,7 @@ spec:
                 - name: PYTHONUNBUFFERED
                   value: "1"
                 - name: FI_EFA_USE_DEVICE_RDMA
-                  value: '0'
+                  value: '1'
                 - name: FI_PROVIDER
                   value: efa
                 - name: NCCL_ASYNC_ERROR_HANDLING
@@ -116,11 +116,11 @@ spec:
               resources:
                 limits:
                   hugepages-2Mi: 5120Mi
-                  vpc.amazonaws.com/efa: 32
+                  vpc.amazonaws.com/efa: 16
                   nvidia.com/gpu: *gpus_per_node
                 requests:
                   nvidia.com/gpu: *gpus_per_node
-                  vpc.amazonaws.com/efa: 32
+                  vpc.amazonaws.com/efa: 16
                   memory: 15000Mi
                   ephemeral-storage: 32Gi
               volumeMounts:
@@ -164,38 +164,6 @@ spec:
                   name: infiniband-efa-14
                 - mountPath: /dev/infiniband/uverbs15
                   name: infiniband-efa-15
-                - mountPath: /dev/infiniband/uverbs16
-                  name: infiniband-efa-16
-                - mountPath: /dev/infiniband/uverbs17
-                  name: infiniband-efa-17
-                - mountPath: /dev/infiniband/uverbs18
-                  name: infiniband-efa-18
-                - mountPath: /dev/infiniband/uverbs19
-                  name: infiniband-efa-19
-                - mountPath: /dev/infiniband/uverbs20
-                  name: infiniband-efa-20
-                - mountPath: /dev/infiniband/uverbs21
-                  name: infiniband-efa-21
-                - mountPath: /dev/infiniband/uverbs22
-                  name: infiniband-efa-22
-                - mountPath: /dev/infiniband/uverbs23
-                  name: infiniband-efa-23
-                - mountPath: /dev/infiniband/uverbs24
-                  name: infiniband-efa-24
-                - mountPath: /dev/infiniband/uverbs25
-                  name: infiniband-efa-25
-                - mountPath: /dev/infiniband/uverbs26
-                  name: infiniband-efa-26
-                - mountPath: /dev/infiniband/uverbs27
-                  name: infiniband-efa-27
-                - mountPath: /dev/infiniband/uverbs28
-                  name: infiniband-efa-28
-                - mountPath: /dev/infiniband/uverbs29
-                  name: infiniband-efa-29
-                - mountPath: /dev/infiniband/uverbs30
-                  name: infiniband-efa-30
-                - mountPath: /dev/infiniband/uverbs31
-                  name: infiniband-efa-31          
           volumes:
             - name: fsx-claim-general--atl-2a1
               persistentVolumeClaim:
@@ -254,54 +222,6 @@ spec:
             - name: infiniband-efa-15
               hostPath:
                 path: /dev/infiniband/uverbs15
-            - name: infiniband-efa-16
-              hostPath:
-                path: /dev/infiniband/uverbs16
-            - name: infiniband-efa-17
-              hostPath:
-                path: /dev/infiniband/uverbs17
-            - name: infiniband-efa-18
-              hostPath:
-                path: /dev/infiniband/uverbs18
-            - name: infiniband-efa-19
-              hostPath:
-                path: /dev/infiniband/uverbs19
-            - name: infiniband-efa-20
-              hostPath:
-                path: /dev/infiniband/uverbs20
-            - name: infiniband-efa-21
-              hostPath:
-                path: /dev/infiniband/uverbs21
-            - name: infiniband-efa-22
-              hostPath:
-                path: /dev/infiniband/uverbs22
-            - name: infiniband-efa-23
-              hostPath:
-                path: /dev/infiniband/uverbs23
-            - name: infiniband-efa-24
-              hostPath:
-                path: /dev/infiniband/uverbs24
-            - name: infiniband-efa-25
-              hostPath:
-                path: /dev/infiniband/uverbs25
-            - name: infiniband-efa-26
-              hostPath:
-                path: /dev/infiniband/uverbs26
-            - name: infiniband-efa-27
-              hostPath:
-                path: /dev/infiniband/uverbs27
-            - name: infiniband-efa-28
-              hostPath:
-                path: /dev/infiniband/uverbs28
-            - name: infiniband-efa-29
-              hostPath:
-                path: /dev/infiniband/uverbs29
-            - name: infiniband-efa-30
-              hostPath:
-                path: /dev/infiniband/uverbs30
-            - name: infiniband-efa-31
-              hostPath:
-                path: /dev/infiniband/uverbs31
             - name: dshm
               emptyDir: 
                 medium: Memory
