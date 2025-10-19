@@ -109,7 +109,7 @@ spec:
                   pip install -e . &&
                   cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace &&
                   bash scripts/distill/v1_distill_dmd_wan_VSA.sh | tee /code-fsx/beidchen-sandbox/fastwan_vsa_dmd.log
-              image: 767397878797.dkr.ecr.us-east-1.amazonaws.com/agif-mm-pt-base:reasoning-vllm.sglang.megatron.deepseek.video.fa3
+              image: 767397878797.dkr.ecr.us-east-1.amazonaws.com/agif-mm-pt-base:reasoning-vllm.sglang.megatron.deepseek.video
               imagePullPolicy: Always
               securityContext:
                 privileged: true
