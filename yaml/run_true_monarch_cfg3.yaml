@@ -36,7 +36,7 @@ spec:
                         values:
                           - p5en.48xlarge
           tolerations:
-            - key: mziyadi-lmsys
+            - key: redrajiv-mm-rl
               operator: Equal
               value: "True"
               effect: NoSchedule
