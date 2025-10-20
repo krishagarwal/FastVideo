@@ -281,6 +281,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
                 patch_size=patch_size,
                 target_sparsity=current_vsa_sparsity,
                 num_layers_enabled=current_sparse_layers_enabled,
+                sparse_layers_skip=self.training_args.sparse_layers_skip,
             )
         elif vmoba_available and envs.FASTVIDEO_ATTENTION_BACKEND == "VMOBA_ATTN":
             moba_params = self.training_args.moba_config.copy()

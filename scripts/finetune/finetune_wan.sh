@@ -1,7 +1,5 @@
 #!/bin/bash
-export FASTVIDEO_ATTENTION_BACKEND=TRUE_MONARCH_ATTN
-export FASTVIDEO_TRUE_MONARCH_NUM_ITERS=8
-export FASTVIDEO_TRUE_MONARCH_MIN_BLOCK_SIZE=5
+export FASTVIDEO_ATTENTION_BACKEND=FLASH_ATTN
 
 # Configs
 MODEL_PATH="Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
@@ -12,8 +10,8 @@ VALIDATION_DATASET_FILE=examples/training/finetune/Wan2.1-VSA/Wan-Syn-Data/valid
 # Training arguments
 training_args=(
   --tracker_project_name fastwan
-  --wandb_run_name wan_1.3b_t2v_true_monarch_attn_8_iters_skip2
-  --output_dir "checkpoints/wan_1.3b_t2v_true_monarch_attn_8_iters_skip2"
+  --wandb_run_name wan_1.3b_t2v_regular_finetune
+  --output_dir "checkpoints/wan_1.3b_t2v_regular_finetune"
   --max_train_steps 4000
   --train_batch_size 1
   --train_sp_batch_size 1
@@ -73,11 +71,6 @@ miscellaneous_args=(
   --ema_start_step 0
   --flow_shift 1
   --seed 1000
-  --VSA_decay_rate 0.03
-  --VSA_decay_interval_steps 0
-  --VSA_sparsity 0.85
-  --monarch_layer_enable_interval_steps 0
-  --sparse_layers_skip 2
 )
 
 # cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace

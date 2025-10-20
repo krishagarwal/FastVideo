@@ -139,6 +139,7 @@ class FastVideoArgs:
     # VSA parameters
     VSA_sparsity: float = 0.0  # inference/validation sparsity
     sparse_layers_enabled: int = 0
+    sparse_layers_skip: int = 0
 
     # V-MoBA parameters
     moba_config_path: str | None = None
@@ -387,6 +388,13 @@ class FastVideoArgs:
             type=int,
             default=FastVideoArgs.sparse_layers_enabled,
             help="Number of transformer layers to enable sparsity",
+        )
+
+        parser.add_argument(
+            "--sparse-layers-skip",
+            type=int,
+            default=FastVideoArgs.sparse_layers_skip,
+            help="Number of initial transformer layers to skip sparsity",
         )
 
         # Master port for distributed training/inference

@@ -155,6 +155,7 @@ class TrueMonarchAttentionMetadata(AttentionMetadata):
     total_seq_length: int
     target_sparsity: int
     num_layers_enabled: int
+    sparse_layers_skip: int
 
 class TrueMonarchAttentionMetadataBuilder(AttentionMetadataBuilder):
     def __init__(self):
@@ -170,6 +171,7 @@ class TrueMonarchAttentionMetadataBuilder(AttentionMetadataBuilder):
         patch_size: tuple[int, int, int],
         target_sparsity: int,
         num_layers_enabled: int,
+        sparse_layers_skip: int,
         **kwargs: dict[str, Any],
     ) -> TrueMonarchAttentionMetadata:
         patch_size = patch_size
@@ -184,7 +186,8 @@ class TrueMonarchAttentionMetadataBuilder(AttentionMetadataBuilder):
             dit_seq_shape=dit_seq_shape,  # type: ignore
             total_seq_length=total_seq_length,  # type: ignore
             target_sparsity=target_sparsity,  # type: ignore
-            num_layers_enabled=num_layers_enabled)  # type: ignore
+            num_layers_enabled=num_layers_enabled,
+            sparse_layers_skip=sparse_layers_skip)  # type: ignore
 
 class VideoSparseAttentionMetadataBuilder(AttentionMetadataBuilder):
 
