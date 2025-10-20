@@ -123,7 +123,7 @@ class DistillationPipeline(TrainingPipeline):
         self.fake_score_optimizer = torch.optim.AdamW(
             fake_score_params,
             lr=fake_score_lr,
-            betas=(0.9, 0.999),
+            betas=(training_args.adam_beta_1, training_args.adam_beta_2),
             weight_decay=training_args.weight_decay,
             eps=1e-8,
         )

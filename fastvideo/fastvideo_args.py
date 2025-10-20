@@ -663,6 +663,9 @@ class TrainingArgs(FastVideoArgs):
     logit_mean: float = 0.0
     logit_std: float = 1.0
     mode_scale: float = 0.0
+    
+    adam_beta_1: float = 0.9
+    adam_beta_2: float = 0.999
 
     num_euler_timesteps: int = 0
     lr_num_cycles: int = 0
@@ -952,6 +955,19 @@ class TrainingArgs(FastVideoArgs):
             default=1.29,
             help=
             "Scale of mode weighting scheme. Only effective when using the `'mode'` as the `weighting_scheme`.",
+        )
+
+        parser.add_argument(
+            "--adam-beta-1",
+            type=float,
+            default=TrainingArgs.adam_beta_1,
+            help="Beta 1 for Adam optimizer.",
+        )
+        parser.add_argument(
+            "--adam-beta-2",
+            type=float,
+            default=TrainingArgs.adam_beta_2,
+            help="Beta 2 for Adam optimizer.",
         )
 
         # Additional training parameters

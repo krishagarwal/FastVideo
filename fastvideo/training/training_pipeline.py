@@ -121,7 +121,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
         self.optimizer = torch.optim.AdamW(
             params_to_optimize,
             lr=training_args.learning_rate,
-            betas=(0.9, 0.999),
+            betas=(training_args.adam_beta_1, training_args.adam_beta_2),
             weight_decay=training_args.weight_decay,
             eps=1e-8,
         )
