@@ -61,7 +61,7 @@ optimizer_args=(
   --mixed_precision "bf16"
   --checkpointing_steps 1000
   --weight_decay 0.01
-  --max_grad_norm 1.0
+  --max_grad_norm 5.0
 )
 
 # Miscellaneous arguments
@@ -75,8 +75,8 @@ miscellaneous_args=(
   --seed 1000
   --VSA_decay_rate 0.03
   --VSA_decay_interval_steps 0
-  --VSA_sparsity 0.80
-  --monarch_layer_enable_interval_steps 50
+  --VSA_sparsity 0.85
+  --monarch_layer_enable_interval_steps 0
 )
 
 # cp -r /checkpoint-fsx/beidchen-sandbox/video/hub /workspace
