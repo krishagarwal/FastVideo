@@ -27,6 +27,50 @@ logger = init_logger(__name__)
 
 _HAS_ERRORED_CLIP_GRAD_NORM_WHILE_HANDLING_FAILING_DTENSOR_CASES = False
 
+@torch.no_grad()
+def _get_individual_norms(
+    tensors: list[torch.Tensor],
+    norm_type: float = 2.0,
+    foreach: bool | None = None,
+) -> list[torch.Tensor]:
+    """
+    Compute per-tensor norms for a list of tensors, preserving input order
+    and staying device-resident when possible.
+    """
+    if len(tensors) == 0:
+        return []
+    norm_type = float(norm_type)
+
+    # Prepare result slots (preserve original order)
+    norms_by_index: list[torch.Tensor | None] = [None] * len(tensors)
+
+    # Group by device/dtype and keep indices to restore order
+    grouped: dict[tuple[torch.device, torch.dtype],
+                  tuple[list[list[torch.Tensor]], list[int]]] = (
+        _group_tensors_by_device_and_dtype([tensors], with_indices=True)  # type: ignore[assignment]
+    )
+
+    for (device, _), ([device_tensors], indices) in grouped.items():
+        local_tensors = [
+            t.to_local() if isinstance(t, torch.distributed.tensor.DTensor) else t
+            for t in device_tensors
+        ]
+        if (foreach is None and _has_foreach_support(local_tensors, device)) or (
+            foreach and _device_has_foreach_support(device)
+        ):
+            device_norms = torch._foreach_norm(local_tensors, norm_type)
+        elif foreach:
+            raise RuntimeError(
+                f"foreach=True was passed, but can't use the foreach API on {device.type} tensors"
+            )
+        else:
+            device_norms = [torch.linalg.vector_norm(g, norm_type) for g in local_tensors]
+
+        for idx, n in zip(indices, device_norms):
+            norms_by_index[idx] = n  # keep on device
+
+    # type: ignore[return-value]
+    return [n for n in norms_by_index if n is not None]
 
 def gather_state_dict_on_cpu_rank0(
     model,
@@ -600,6 +644,80 @@ def clip_grad_norm_(
     foreach: bool | None = None,
     pp_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ) -> torch.Tensor:
+    r"""
+    Clip gradients **per tensor** with each tensor allocated a share of the global max_norm
+    proportional to its parameter count.
+
+    For each parameter tensor p with a gradient g:
+        allowed_norm(p) = max_norm * (p.numel() / total_numel_across_params_with_grads)
+        g <- g * min(1, allowed_norm(p) / (||g||_p + eps))
+
+    Returns:
+        torch.Tensor: the (global) total norm of all gradients (for logging).
+    """
+    if isinstance(parameters, torch.Tensor):
+        parameters = [parameters]
+
+    # Keep only params with grads (and preserve order)
+    params_with_grads: list[torch.Tensor] = [p for p in parameters if p.grad is not None]
+    grads: list[torch.Tensor] = [p.grad for p in params_with_grads]
+
+    if len(grads) == 0:
+        return torch.tensor(0.0)
+
+    # Compute global total norm for logging (matches previous behavior)
+    total_norm = _get_total_norm(grads, norm_type, error_if_nonfinite, foreach)
+
+    # If DTensor, reduce to get a local tensor for .item() etc. (same as before)
+    if isinstance(total_norm, torch.distributed.tensor.DTensor):
+        total_norm = total_norm.full_tensor()
+
+    if pp_mesh is not None:
+        raise NotImplementedError("Pipeline parallel is not supported")
+        # (Existing PP code path left here intentionally.)
+
+    # ----- New: per-tensor clipping budget -----
+    # Total number of elements across parameters that actually have gradients
+    total_numel = sum(p.numel() for p in params_with_grads)
+    if total_numel == 0:
+        return total_norm
+
+    # Per-gradient norms (device-resident; preserves order)
+    per_grad_norms = _get_individual_norms(grads, norm_type, foreach)
+
+    # Group grads by device/dtype to apply foreach where possible
+    grouped_grads = _group_tensors_by_device_and_dtype([grads], with_indices=True)
+
+    eps = 1e-6
+    for (device, _), ([device_grads], indices) in grouped_grads.items():
+        # Build device-local coefficients per grad
+        device_coeffs: list[torch.Tensor] = []
+        for idx, g in zip(indices, device_grads):
+            p = params_with_grads[idx]
+            # Allowed norm share for this tensor
+            allowed = max_norm * (p.numel() / float(total_numel))
+            # Norm for this gradient, kept on device; move if needed
+            gn = per_grad_norms[idx].to(device)
+            coef = (torch.as_tensor(allowed, device=device, dtype=gn.dtype) /
+                    (gn + eps))
+            coef = torch.clamp(coef, max=1.0)
+            device_coeffs.append(coef)
+
+        # Apply scaling
+        if (foreach is None and _has_foreach_support(device_grads, device)) or (
+            foreach and _device_has_foreach_support(device)
+        ):
+            torch._foreach_mul_(device_grads, device_coeffs)
+        elif foreach:
+            raise RuntimeError(
+                f"foreach=True was passed, but can't use the foreach API on {device.type} tensors"
+            )
+        else:
+            for g, c in zip(device_grads, device_coeffs):
+                g.mul_(c)
+
+    return total_norm
+
     r"""
     Clip the gradient norm of parameters.
 
