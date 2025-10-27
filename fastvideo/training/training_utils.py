@@ -612,13 +612,10 @@ def _agc_unitwise_reduce_dims(p: torch.Tensor) -> tuple[tuple[int, ...] | None, 
     - Linear/Embedding: (out, in) -> reduce over dim=1 (keepdim=True)
     - Conv: (out_c, in_c, kH, kW) -> reduce over (1,2,3) (keepdim=True)
     - Vectors/bias/norm weights: 1D -> scalar norms (keepdim=False)
-    - Scalars: reduce over all (scalar)
     """
     if p.ndim <= 1:
-        return None, False  # scalar / vector -> scalar norm
-    # keep the first dim (output units), reduce over the rest
-    reduce_dims = tuple(range(1, p.ndim))
-    return reduce_dims, True  # keepdim=True for broadcasting back to p.grad
+        return None, False
+    return tuple(range(1, p.ndim)), True
 
 @torch.no_grad()
 def agc_clip_(
@@ -633,61 +630,56 @@ def agc_clip_(
     eps: float = 1e-6,
 ) -> torch.Tensor:
     r"""
-    Adaptive Gradient Clipping (AGC).
+    Adaptive Gradient Clipping (AGC), DTensor-safe.
 
     For each parameter tensor p with gradient g:
         g <- g * min(1, clipping * ||w|| / (||g|| + eps))
 
-    If unitwise=True and p.ndim>1, ||·|| is computed per output-unit with keepdim=True
+    If unitwise=True and p.ndim>1, norms are computed per output-unit (keepdim=True)
     so that scaling broadcasts across g.
 
     Returns:
-        torch.Tensor: global total grad norm (pre-clip), like torch.nn.utils.clip_grad_norm_
+        torch.Tensor: global total grad norm (pre-clip), for logging.
     """
     if isinstance(parameters, torch.Tensor):
         parameters = [parameters]
 
-    # Keep only params that actually have grads, preserve order
     params_with_grads: list[torch.Tensor] = [p for p in parameters if p.grad is not None]
     if len(params_with_grads) == 0:
         return torch.tensor(0.0)
 
     grads: list[torch.Tensor] = [p.grad for p in params_with_grads]
 
-    # Compute global total norm BEFORE clipping for logging (same semantics as your old helper)
+    # Global total norm BEFORE clipping (same semantics as your previous helper)
     total_norm = _get_total_norm(grads, norm_type, error_if_nonfinite, foreach)
     if isinstance(total_norm, torch.distributed.tensor.DTensor):
         total_norm = total_norm.full_tensor()
 
     if pp_mesh is not None:
-        # Keep semantics consistent with your existing code
         raise NotImplementedError("Pipeline parallel is not supported")
 
-    # Group grads for device-efficient application; we need indices to map back to params
+    # Group grads for efficient iteration (we need indices to map back to params)
     grouped = _group_tensors_by_device_and_dtype([grads], with_indices=True)
 
     for (device, _), ([device_grads], indices) in grouped.items():
-        # Decide whether foreach is possible: only when all scales are scalars (no unitwise broadcasting)
+        # Disable foreach if:
+        #  - any grad is DTensor (not supported to mix with regular Tensor scales), or
+        #  - unitwise broadcasting is needed (foreach needs scalar scales)
+        any_dtensor = any(isinstance(g, torch.distributed.tensor.DTensor) for g in device_grads)
         foreach_ok = (
-            (foreach is None and _has_foreach_support(device_grads, device)) or
-            (foreach and _device_has_foreach_support(device))
+            not any_dtensor
+            and not unitwise
+            and ((foreach is None and _has_foreach_support(device_grads, device)) or
+                 (foreach and _device_has_foreach_support(device)))
         )
 
-        # If any param in this device group needs unitwise broadcasting, we’ll fall back to per-tensor loop
-        if unitwise:
-            for idx in indices:
-                if params_with_grads[idx].ndim > 1:
-                    foreach_ok = False
-                    break
-
         if foreach_ok:
-            # Scalar scale factors (no unitwise broadcasting)
+            # Scalar scales only (no broadcasting), regular tensors only
             scales: list[torch.Tensor] = []
             for idx, g in zip(indices, device_grads):
                 p = params_with_grads[idx]
-                # norms on local shards if DTensor
-                p_local = p.to_local() if isinstance(p, torch.distributed.tensor.DTensor) else p
-                g_local = g.to_local() if isinstance(g, torch.distributed.tensor.DTensor) else g
+                p_local = p  # regular tensors only in this path
+                g_local = g
 
                 w_norm = torch.linalg.vector_norm(p_local, 2)
                 g_norm = torch.linalg.vector_norm(g_local, 2)
@@ -698,32 +690,35 @@ def agc_clip_(
 
             torch._foreach_mul_(device_grads, scales)
         else:
-            # Per-tensor path (supports unitwise broadcasting)
+            # Per-tensor path (supports DTensor and unitwise broadcasting)
             for idx, g in zip(indices, device_grads):
                 p = params_with_grads[idx]
 
-                # Local views for norm computation if DTensor
-                p_for_norm = p.to_local() if isinstance(p, torch.distributed.tensor.DTensor) else p
-                g_for_norm = g.to_local() if isinstance(g, torch.distributed.tensor.DTensor) else g
+                # Work on local shards if DTensor; in-place on the local tensor updates the DTensor backing
+                if isinstance(g, torch.distributed.tensor.DTensor):
+                    g_target = g.to_local()
+                else:
+                    g_target = g
 
-                if unitwise:
+                if isinstance(p, torch.distributed.tensor.DTensor):
+                    p_for_norm = p.to_local()
+                else:
+                    p_for_norm = p
+
+                # Compute norms (on local shard shapes)
+                if unitwise and p_for_norm.ndim > 1:
                     reduce_dims, keepdim = _agc_unitwise_reduce_dims(p_for_norm)
-                    if reduce_dims is None:
-                        # scalar/vector -> scalar norms
-                        w_norm = torch.linalg.vector_norm(p_for_norm, 2)
-                        g_norm = torch.linalg.vector_norm(g_for_norm, 2)
-                    else:
-                        w_norm = torch.linalg.vector_norm(p_for_norm, 2, dim=reduce_dims, keepdim=keepdim)
-                        g_norm = torch.linalg.vector_norm(g_for_norm, 2, dim=reduce_dims, keepdim=keepdim)
+                    w_norm = torch.linalg.vector_norm(p_for_norm, 2, dim=reduce_dims, keepdim=keepdim)
+                    g_norm = torch.linalg.vector_norm(g_target, 2, dim=reduce_dims, keepdim=keepdim)
                 else:
                     w_norm = torch.linalg.vector_norm(p_for_norm, 2)
-                    g_norm = torch.linalg.vector_norm(g_for_norm, 2)
+                    g_norm = torch.linalg.vector_norm(g_target, 2)
 
                 coef = (clipping * w_norm) / (g_norm + eps)
-                coef = torch.clamp(coef, max=1.0).to(device=g.device, dtype=g.dtype)
+                coef = torch.clamp(coef, max=1.0).to(device=g_target.device, dtype=g_target.dtype)
 
-                # Elementwise multiply; coef may broadcast over g
-                g.mul_(coef)
+                # Elementwise multiply; coef may broadcast over g_target
+                g_target.mul_(coef)
 
     return total_norm
 
@@ -737,10 +732,6 @@ def agc_clip_while_handling_failing_dtensor_cases(
     foreach: bool | None = None,
     pp_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
 ) -> torch.Tensor | None:
-    """
-    Wrapper mirroring your DTensor/cross-mesh error handling for AGC.
-    Returns total norm (pre-clip) or None if we had to skip due to an error.
-    """
     global _HAS_ERRORED_AGC_WHILE_HANDLING_FAILING_DTENSOR_CASES
 
     if not _HAS_ERRORED_AGC_WHILE_HANDLING_FAILING_DTENSOR_CASES:
@@ -758,8 +749,6 @@ def agc_clip_while_handling_failing_dtensor_cases(
             if "DTensor does not support cross-mesh operation" in str(e):
                 logger.warning(
                     "DTensor does not support cross-mesh operation (AGC path). "
-                    "If you haven't fully tensor-parallelized your model while combining other parallelisms "
-                    "such as FSDP, it could be the reason for this error. "
                     "Gradient clipping will be skipped and grad norm will not be logged."
                 )
         except Exception as e:

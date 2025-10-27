@@ -394,18 +394,16 @@ class TrainingPipeline(LoRAPipeline, ABC):
         #     grad_norm = 0.0
         if max_grad_norm is not None:
             # Interpret max_grad_norm as the AGC clipping coefficient (lambda).
-            # Typical values: 0.01 - 0.1. Try 0.02, 0.05, 0.1.
             model_parts = [self.transformer]
             params = [p for m in model_parts for p in m.parameters() if p.requires_grad]
 
             grad_norm = agc_clip_while_handling_failing_dtensor_cases(
                 params,
-                clipping=max_grad_norm,      # AGC lambda
-                unitwise=True,               # unit-wise AGC (recommended)
-                foreach=None,                # foreach used only when safe (scalar scales)
+                clipping=max_grad_norm,
+                unitwise=True,
+                foreach=None,
             )
 
-            # Keep your logging behavior (global norm pre-clip); make the finiteness check robust
             grad_norm = grad_norm.item() if grad_norm is not None else 0.0
             assert math.isfinite(grad_norm), f"Non-finite grad norm: {grad_norm}"
         else:
