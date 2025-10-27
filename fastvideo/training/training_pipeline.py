@@ -40,6 +40,7 @@ from fastvideo.training.activation_checkpoint import (
     apply_activation_checkpointing)
 from fastvideo.training.training_utils import (
     clip_grad_norm_while_handling_failing_dtensor_cases,
+    agc_clip_while_handling_failing_dtensor_cases,
     compute_density_for_timestep_sampling, count_trainable, get_scheduler,
     get_sigmas, load_checkpoint, normalize_dit_input, save_checkpoint,
     shard_latents_across_sp, get_grad_norm_by_name)
@@ -379,16 +380,34 @@ class TrainingPipeline(LoRAPipeline, ABC):
         # TODO(will): perhaps move this into transformer api so that we can do
         # the following:
         # grad_norm = transformer.clip_grad_norm_(max_grad_norm)
+        # if max_grad_norm is not None:
+        #     model_parts = [self.transformer]
+        #     grad_norm = clip_grad_norm_while_handling_failing_dtensor_cases(
+        #         [p for m in model_parts for p in m.parameters()],
+        #         max_grad_norm,
+        #         foreach=None,
+        #     )
+        #     assert grad_norm is not float('nan') or grad_norm is not float(
+        #         'inf')
+        #     grad_norm = grad_norm.item() if grad_norm is not None else 0.0
+        # else:
+        #     grad_norm = 0.0
         if max_grad_norm is not None:
+            # Interpret max_grad_norm as the AGC clipping coefficient (lambda).
+            # Typical values: 0.01 - 0.1. Try 0.02, 0.05, 0.1.
             model_parts = [self.transformer]
-            grad_norm = clip_grad_norm_while_handling_failing_dtensor_cases(
-                [p for m in model_parts for p in m.parameters()],
-                max_grad_norm,
-                foreach=None,
+            params = [p for m in model_parts for p in m.parameters() if p.requires_grad]
+
+            grad_norm = agc_clip_while_handling_failing_dtensor_cases(
+                params,
+                clipping=max_grad_norm,      # AGC lambda
+                unitwise=True,               # unit-wise AGC (recommended)
+                foreach=None,                # foreach used only when safe (scalar scales)
             )
-            assert grad_norm is not float('nan') or grad_norm is not float(
-                'inf')
+
+            # Keep your logging behavior (global norm pre-clip); make the finiteness check robust
             grad_norm = grad_norm.item() if grad_norm is not None else 0.0
+            assert math.isfinite(grad_norm), f"Non-finite grad norm: {grad_norm}"
         else:
             grad_norm = 0.0
         training_batch.grad_norm = grad_norm
