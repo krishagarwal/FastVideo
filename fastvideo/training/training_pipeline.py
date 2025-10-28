@@ -81,12 +81,15 @@ class TrainingPipeline(LoRAPipeline, ABC):
             - timestep: the timestep with shape [B]
         Output: the corresponding weighting [B]
         """
-        self.noise_scheduler.linear_timesteps_weights = self.noise_scheduler.linear_timesteps_weights.to(timestep.device)
-        self.noise_scheduler.timesteps = self.noise_scheduler.timesteps.to(timestep.device)
-        timestep_id = torch.argmin(
-            (self.noise_scheduler.timesteps.unsqueeze(1) - timestep.unsqueeze(0)).abs(), dim=0)
-        weights = self.noise_scheduler.linear_timesteps_weights[timestep_id]
-        return weights
+        with torch.no_grad():
+            if timestep.ndim == 2:
+                timestep = timestep.flatten(0, 1)
+            self.noise_scheduler.linear_timesteps_weights = self.noise_scheduler.linear_timesteps_weights.to(timestep.device)
+            self.noise_scheduler.timesteps = self.noise_scheduler.timesteps.to(timestep.device)
+            timestep_id = torch.argmin(
+                (self.noise_scheduler.timesteps.unsqueeze(1) - timestep.unsqueeze(0)).abs(), dim=0)
+            weights = self.noise_scheduler.linear_timesteps_weights[timestep_id]
+            return weights
 
     def __init__(
             self,
@@ -242,8 +245,8 @@ class TrainingPipeline(LoRAPipeline, ABC):
 
     def _prepare_dit_inputs(self,
                             training_batch: TrainingBatch) -> TrainingBatch:
-        latents = training_batch.latents
-        batch_size = latents.shape[0]
+        latents = training_batch.latents # (b, c, t, h, w)
+        batch_size = latents.shape[0] * latents.shape[2]
         noise = torch.randn(latents.shape,
                             generator=self.noise_gen_cuda,
                             device=latents.device,
@@ -267,12 +270,15 @@ class TrainingPipeline(LoRAPipeline, ABC):
             self.noise_scheduler,
             latents.device,
             timesteps,
-            n_dim=latents.ndim,
+            n_dim=latents.ndim - 1,
             dtype=latents.dtype,
         )
+        sigmas = rearrange(sigmas, '(b t) c h w -> b c t h w', b=latents.shape[0], t=latents.shape[2]).contiguous()
+        timesteps = rearrange(timesteps, '(b t) -> b t', b=latents.shape[0], t=latents.shape[2]).contiguous()
 
         if not hasattr(self.noise_scheduler, 'linear_timesteps_weights'):
-            self.compute_training_weights()
+            with torch.no_grad():
+                self.compute_training_weights()
 
         noisy_model_input = (1.0 -
                              sigmas) * training_batch.latents + sigmas * noise
@@ -375,8 +381,8 @@ class TrainingPipeline(LoRAPipeline, ABC):
             assert model_pred.shape == target.shape, f"model_pred.shape: {model_pred.shape}, target.shape: {target.shape}"
             loss = torch.nn.functional.mse_loss(
                 model_pred.float(), target.float(), reduction='none'
-            ).mean(dim=(1, 2, 3, 4))
-            loss = loss * self.training_weight(training_batch.timesteps)
+            ).mean(dim=(1, 3, 4)) # mean over c h w
+            loss = loss * self.training_weight(training_batch.timesteps).unflatten(0, loss.shape)
             loss = loss.mean()
             # loss = (torch.mean((model_pred.float() - target.float())**2) /
             #         self.training_args.gradient_accumulation_steps)
