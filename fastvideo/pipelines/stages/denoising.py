@@ -356,12 +356,15 @@ class DenoisingStage(PipelineStage):
                         self.attn_metadata_builder_cls = TrueMonarchAttentionMetadataBuilder
                         if self.attn_metadata_builder_cls is not None:
                             self.attn_metadata_builder = self.attn_metadata_builder_cls()
+                            sparse_layers_enabled = fastvideo_args.sparse_layers_enabled
+                            if sparse_layers_enabled < 0:
+                                sparse_layers_enabled = self.transformer.config.num_layers
                             attn_metadata = self.attn_metadata_builder.build(
                                 current_timestep=i,
                                 raw_latent_shape=batch.raw_latent_shape[2:5],
                                 patch_size=fastvideo_args.pipeline_config.dit_config.patch_size,
                                 target_sparsity=fastvideo_args.VSA_sparsity,
-                                num_layers_enabled=fastvideo_args.sparse_layers_enabled,
+                                num_layers_enabled=sparse_layers_enabled,
                                 sparse_layers_skip=fastvideo_args.sparse_layers_skip,
                             )
                             assert attn_metadata is not None, "attn_metadata cannot be None"
@@ -914,12 +917,15 @@ class DmdDenoisingStage(DenoisingStage):
                         self.attn_metadata_builder_cls = TrueMonarchAttentionMetadataBuilder
                         if self.attn_metadata_builder_cls is not None:
                             self.attn_metadata_builder = self.attn_metadata_builder_cls()
+                            sparse_layers_enabled = fastvideo_args.sparse_layers_enabled
+                            if sparse_layers_enabled < 0:
+                                sparse_layers_enabled = self.transformer.config.num_layers
                             attn_metadata = self.attn_metadata_builder.build(
                                 current_timestep=i,
                                 raw_latent_shape=batch.raw_latent_shape[2:5],
                                 patch_size=fastvideo_args.pipeline_config.dit_config.patch_size,
                                 target_sparsity=fastvideo_args.VSA_sparsity,
-                                num_layers_enabled=fastvideo_args.sparse_layers_enabled,
+                                num_layers_enabled=sparse_layers_enabled,
                                 sparse_layers_skip=fastvideo_args.sparse_layers_skip,
                             )
                             assert attn_metadata is not None, "attn_metadata cannot be None"

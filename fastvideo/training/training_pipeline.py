@@ -66,7 +66,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
     train_loader_iter: Iterator[dict[str, Any]]
     current_epoch: int = 0
 
-    def compute_training_weights(self, num_inference_steps):
+    def compute_training_weights(self, num_inference_steps=100):
         x = self.noise_scheduler.timesteps
         y = torch.exp(-2 * ((x - num_inference_steps / 2) /
                         num_inference_steps) ** 2)
@@ -272,11 +272,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
         )
 
         if not hasattr(self.noise_scheduler, 'linear_timesteps_weights'):
-            validation_steps = self.training_args.validation_sampling_steps.split(",")
-            validation_steps = [int(step) for step in validation_steps]
-            validation_steps = [step for step in validation_steps if step > 0]
-            assert len(validation_steps) == 1
-            self.compute_training_weights(validation_steps[0])
+            self.compute_training_weights()
 
         noisy_model_input = (1.0 -
                              sigmas) * training_batch.latents + sigmas * noise
