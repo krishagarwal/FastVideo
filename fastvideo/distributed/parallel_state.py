@@ -797,6 +797,7 @@ def init_distributed_environment(
                 backend=backend,
                 init_method=distributed_init_method,
                 world_size=world_size,
+                timeout=7200,
                 rank=rank)
         else:
             # this backend is used for WORLD
@@ -804,6 +805,7 @@ def init_distributed_environment(
                 backend=backend,
                 init_method=distributed_init_method,
                 world_size=world_size,
+                timeout=7200,
                 rank=rank,
                 device_id=device_id)
     # set the local rank
