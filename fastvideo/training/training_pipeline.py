@@ -66,6 +66,27 @@ class TrainingPipeline(LoRAPipeline, ABC):
     train_loader_iter: Iterator[dict[str, Any]]
     current_epoch: int = 0
 
+    def compute_training_weights(self, num_inference_steps):
+        x = self.noise_scheduler.timesteps
+        y = torch.exp(-2 * ((x - num_inference_steps / 2) /
+                        num_inference_steps) ** 2)
+        y_shifted = y - y.min()
+        bsmntw_weighing = y_shifted * \
+            (num_inference_steps / y_shifted.sum())
+        self.noise_scheduler.linear_timesteps_weights = bsmntw_weighing
+    
+    def training_weight(self, timestep):
+        """
+        Input:
+            - timestep: the timestep with shape [B]
+        Output: the corresponding weighting [B]
+        """
+        self.noise_scheduler.linear_timesteps_weights = self.noise_scheduler.linear_timesteps_weights.to(timestep.device)
+        timestep_id = torch.argmin(
+            (self.noise_scheduler.timesteps.unsqueeze(1) - timestep.unsqueeze(0)).abs(), dim=0)
+        weights = self.noise_scheduler.linear_timesteps_weights[timestep_id]
+        return weights
+
     def __init__(
             self,
             model_path: str,
@@ -248,6 +269,14 @@ class TrainingPipeline(LoRAPipeline, ABC):
             n_dim=latents.ndim,
             dtype=latents.dtype,
         )
+
+        if not hasattr(self.noise_scheduler, 'linear_timesteps_weights'):
+            validation_steps = self.training_args.validation_sampling_steps.split(",")
+            validation_steps = [int(step) for step in validation_steps]
+            validation_steps = [step for step in validation_steps if step > 0]
+            assert len(validation_steps) == 1
+            self.compute_training_weights(validation_steps[0])
+
         noisy_model_input = (1.0 -
                              sigmas) * training_batch.latents + sigmas * noise
 
@@ -347,8 +376,13 @@ class TrainingPipeline(LoRAPipeline, ABC):
 
             # make sure no implicit broadcasting happens
             assert model_pred.shape == target.shape, f"model_pred.shape: {model_pred.shape}, target.shape: {target.shape}"
-            loss = (torch.mean((model_pred.float() - target.float())**2) /
-                    self.training_args.gradient_accumulation_steps)
+            loss = torch.nn.functional.mse_loss(
+                model_pred.float(), target.float(), reduction='none'
+            ).mean(dim=(1, 2, 3, 4))
+            loss = loss * self.training_weight(training_batch.timesteps)
+            loss = loss.mean()
+            # loss = (torch.mean((model_pred.float() - target.float())**2) /
+            #         self.training_args.gradient_accumulation_steps)
 
             loss.backward()
             avg_loss = loss.detach().clone()
@@ -380,34 +414,34 @@ class TrainingPipeline(LoRAPipeline, ABC):
         # TODO(will): perhaps move this into transformer api so that we can do
         # the following:
         # grad_norm = transformer.clip_grad_norm_(max_grad_norm)
-        # if max_grad_norm is not None:
-        #     model_parts = [self.transformer]
-        #     grad_norm = clip_grad_norm_while_handling_failing_dtensor_cases(
-        #         [p for m in model_parts for p in m.parameters()],
-        #         max_grad_norm,
-        #         foreach=None,
-        #     )
-        #     assert grad_norm is not float('nan') or grad_norm is not float(
-        #         'inf')
-        #     grad_norm = grad_norm.item() if grad_norm is not None else 0.0
-        # else:
-        #     grad_norm = 0.0
         if max_grad_norm is not None:
-            # Interpret max_grad_norm as the AGC clipping coefficient (lambda).
             model_parts = [self.transformer]
-            params = [p for m in model_parts for p in m.parameters() if p.requires_grad]
-
-            grad_norm = agc_clip_while_handling_failing_dtensor_cases(
-                params,
-                clipping=max_grad_norm,
-                unitwise=True,
+            grad_norm = clip_grad_norm_while_handling_failing_dtensor_cases(
+                [p for m in model_parts for p in m.parameters()],
+                max_grad_norm,
                 foreach=None,
             )
-
+            assert grad_norm is not float('nan') or grad_norm is not float(
+                'inf')
             grad_norm = grad_norm.item() if grad_norm is not None else 0.0
-            assert math.isfinite(grad_norm), f"Non-finite grad norm: {grad_norm}"
         else:
             grad_norm = 0.0
+        # if max_grad_norm is not None:
+        #     # Interpret max_grad_norm as the AGC clipping coefficient (lambda).
+        #     model_parts = [self.transformer]
+        #     params = [p for m in model_parts for p in m.parameters() if p.requires_grad]
+
+        #     grad_norm = agc_clip_while_handling_failing_dtensor_cases(
+        #         params,
+        #         clipping=max_grad_norm,
+        #         unitwise=True,
+        #         foreach=None,
+        #     )
+
+        #     grad_norm = grad_norm.item() if grad_norm is not None else 0.0
+        #     assert math.isfinite(grad_norm), f"Non-finite grad norm: {grad_norm}"
+        # else:
+        #     grad_norm = 0.0
         training_batch.grad_norm = grad_norm
         return training_batch
 
@@ -486,6 +520,11 @@ class TrainingPipeline(LoRAPipeline, ABC):
         logger.info("Initialized random seeds with seed: %s", self.seed)
 
         self.noise_scheduler = FlowMatchEulerDiscreteScheduler()
+        validation_steps = self.training_args.validation_sampling_steps.split(",")
+        validation_steps = [int(step) for step in validation_steps]
+        validation_steps = [step for step in validation_steps if step > 0]
+        assert len(validation_steps) == 1
+        self.noise_scheduler.compute_training_weights(validation_steps[0])
 
         if self.training_args.resume_from_checkpoint:
             self._resume_from_checkpoint()

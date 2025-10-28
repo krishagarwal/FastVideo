@@ -61,7 +61,7 @@ optimizer_args=(
   --mixed_precision "bf16"
   --checkpointing_steps 1000
   --weight_decay 0.01
-  --max_grad_norm 5.0
+  --max_grad_norm 1.0
 )
 
 # Miscellaneous arguments
