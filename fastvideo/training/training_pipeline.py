@@ -520,11 +520,6 @@ class TrainingPipeline(LoRAPipeline, ABC):
         logger.info("Initialized random seeds with seed: %s", self.seed)
 
         self.noise_scheduler = FlowMatchEulerDiscreteScheduler()
-        validation_steps = self.training_args.validation_sampling_steps.split(",")
-        validation_steps = [int(step) for step in validation_steps]
-        validation_steps = [step for step in validation_steps if step > 0]
-        assert len(validation_steps) == 1
-        self.noise_scheduler.compute_training_weights(validation_steps[0])
 
         if self.training_args.resume_from_checkpoint:
             self._resume_from_checkpoint()
