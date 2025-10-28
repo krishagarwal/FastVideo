@@ -36,7 +36,7 @@ spec:
                         values:
                           - p5en.48xlarge
           tolerations:
-            - key: guparpit-4b-rs
+            - key: mziyadi-lmsys
               operator: Equal
               value: "True"
               effect: NoSchedule
