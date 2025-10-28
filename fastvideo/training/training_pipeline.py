@@ -82,6 +82,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
         Output: the corresponding weighting [B]
         """
         self.noise_scheduler.linear_timesteps_weights = self.noise_scheduler.linear_timesteps_weights.to(timestep.device)
+        self.noise_scheduler.timesteps = self.noise_scheduler.timesteps.to(timestep.device)
         timestep_id = torch.argmin(
             (self.noise_scheduler.timesteps.unsqueeze(1) - timestep.unsqueeze(0)).abs(), dim=0)
         weights = self.noise_scheduler.linear_timesteps_weights[timestep_id]
