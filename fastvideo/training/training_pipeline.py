@@ -254,7 +254,7 @@ class TrainingPipeline(LoRAPipeline, ABC):
         u = compute_density_for_timestep_sampling(
             weighting_scheme=self.training_args.weighting_scheme,
             batch_size=batch_size,
-            generator=self.noise_random_generator,
+            generator=self.level_random_generator,
             logit_mean=self.training_args.logit_mean,
             logit_std=self.training_args.logit_std,
             mode_scale=self.training_args.mode_scale,
@@ -516,6 +516,8 @@ class TrainingPipeline(LoRAPipeline, ABC):
         # Set random seeds for deterministic training
         self.noise_random_generator = torch.Generator(device="cpu").manual_seed(
             self.seed)
+        self.level_random_generator = torch.Generator(device="cpu").manual_seed(
+            self.seed + self.global_rank)
         self.noise_gen_cuda = torch.Generator(device="cuda").manual_seed(
             self.seed)
         self.validation_random_generator = torch.Generator(
