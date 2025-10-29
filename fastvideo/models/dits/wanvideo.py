@@ -1261,7 +1261,7 @@ class WanTransformer3DModel(CachableDiT):
 
         if shift.dim() == 4:
             hidden_states = hidden_states.view(batch_size, shift.shape[1], -1, self.hidden_size)
-            hidden_states = self.norm_out(hidden_states.float(), shift, scale)
+            hidden_states = self.norm_out(hidden_states, shift, scale)
             hidden_states = hidden_states.view(batch_size, -1, self.hidden_size)
         else:
             hidden_states = self.norm_out(hidden_states, shift, scale)
