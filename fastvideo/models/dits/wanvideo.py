@@ -1252,13 +1252,19 @@ class WanTransformer3DModel(CachableDiT):
         if temb.dim() == 3:
             # batch_size, seq_len, inner_dim (wan 2.2 ti2v)
             shift, scale = (self.scale_shift_table.unsqueeze(0) + temb.unsqueeze(2)).chunk(2, dim=2)
-            shift = shift.squeeze(2)
-            scale = scale.squeeze(2)
+            if ts_seq_len == hidden_states.shape[1]:
+                shift = shift.squeeze(2)
+                scale = scale.squeeze(2)
         else:
             # batch_size, inner_dim
             shift, scale = (self.scale_shift_table + temb.unsqueeze(1)).chunk(2, dim=1)
-            
-        hidden_states = self.norm_out(hidden_states, shift, scale)
+
+        if shift.dim() == 4:
+            hidden_states = hidden_states.view(batch_size, shift.shape[1], -1, self.hidden_size)
+            hidden_states = self.norm_out(hidden_states.float(), shift, scale)
+            hidden_states = hidden_states.view(batch_size, -1, self.hidden_size)
+        else:
+            hidden_states = self.norm_out(hidden_states, shift, scale)
         hidden_states = self.proj_out(hidden_states)
 
         hidden_states = hidden_states.reshape(batch_size, post_patch_num_frames,
