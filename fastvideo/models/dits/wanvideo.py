@@ -317,7 +317,7 @@ class WanTransformerBlock(nn.Module):
     ) -> torch.Tensor:
         if hidden_states.dim() == 4:
             hidden_states = hidden_states.squeeze(1)
-        bs, seq_length, _ = hidden_states.shape
+        bs, seq_length, emb_dim = hidden_states.shape
         orig_dtype = hidden_states.dtype
         # assert orig_dtype != torch.float32
 
@@ -326,13 +326,14 @@ class WanTransformerBlock(nn.Module):
             shift_msa, scale_msa, gate_msa, c_shift_msa, c_scale_msa, c_gate_msa = (
                 self.scale_shift_table.unsqueeze(0) + temb.float()
             ).chunk(6, dim=2)
-            # batch_size, seq_len, 1, inner_dim
-            shift_msa = shift_msa.squeeze(2)
-            scale_msa = scale_msa.squeeze(2)
-            gate_msa = gate_msa.squeeze(2)
-            c_shift_msa = c_shift_msa.squeeze(2)
-            c_scale_msa = c_scale_msa.squeeze(2)
-            c_gate_msa = c_gate_msa.squeeze(2)
+            if temb.shape[1] == seq_length:
+                # batch_size, seq_len, 1, inner_dim
+                shift_msa = shift_msa.squeeze(2)
+                scale_msa = scale_msa.squeeze(2)
+                gate_msa = gate_msa.squeeze(2)
+                c_shift_msa = c_shift_msa.squeeze(2)
+                c_scale_msa = c_scale_msa.squeeze(2)
+                c_gate_msa = c_gate_msa.squeeze(2)
         else:
             # temb: batch_size, 6, inner_dim (wan2.1/wan2.2 14B)
             e = self.scale_shift_table + temb.float()
@@ -341,7 +342,11 @@ class WanTransformerBlock(nn.Module):
         assert shift_msa.dtype == torch.float32
 
         # 1. Self-attention
-        norm_hidden_states = (self.norm1(hidden_states.float()) *
+        if shift_msa.dim() == 4:
+            norm_hidden_states = (self.norm1(hidden_states.float()).view(bs, scale_msa.shape[1], -1, emb_dim) * (1 + scale_msa) + shift_msa).to(orig_dtype)
+            norm_hidden_states = norm_hidden_states.view(bs, seq_length, emb_dim)
+        else:
+            norm_hidden_states = (self.norm1(hidden_states.float()) *
                               (1 + scale_msa) + shift_msa).to(orig_dtype)
         # if envs.RECORD_ENABLE:
             # torch.save(norm_hidden_states, f"layer_data/{envs.CURR_PROMPT_DIR}/x{envs.CURR_LAYER}_t{envs.SELECTED_TIMESTEP}.pt")
@@ -483,7 +488,7 @@ class WanTransformerBlock_VSA(nn.Module):
     ) -> torch.Tensor:
         if hidden_states.dim() == 4:
             hidden_states = hidden_states.squeeze(1)
-        bs, seq_length, _ = hidden_states.shape
+        bs, seq_length, emb_dim = hidden_states.shape
         orig_dtype = hidden_states.dtype
         # assert orig_dtype != torch.float32
         e = self.scale_shift_table + temb.float()
@@ -492,7 +497,11 @@ class WanTransformerBlock_VSA(nn.Module):
         assert shift_msa.dtype == torch.float32
 
         # 1. Self-attention
-        norm_hidden_states = (self.norm1(hidden_states.float()) *
+        if shift_msa.dim() == 4:
+            norm_hidden_states = (self.norm1(hidden_states.float()).view(bs, scale_msa.shape[1], -1, emb_dim) * (1 + scale_msa) + shift_msa).to(orig_dtype)
+            norm_hidden_states = norm_hidden_states.view(bs, seq_length, emb_dim)
+        else:
+            norm_hidden_states = (self.norm1(hidden_states.float()) *
                               (1 + scale_msa) + shift_msa).to(orig_dtype)
         query, _ = self.to_q(norm_hidden_states)
         key, _ = self.to_k(norm_hidden_states)
