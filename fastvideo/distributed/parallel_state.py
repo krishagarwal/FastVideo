@@ -489,7 +489,7 @@ class GroupCoordinator:
         """Broadcast the input tensor dictionary.
         NOTE: `src` is the local rank of the source rank.
         """
-        # Bypass the function if we are using only 1 GPU.
+        # Bypass the function if we are using only 1 GPU or dist is not init.
         if (not torch.distributed.is_initialized() or self.world_size == 1):
             return tensor_dict
 
@@ -573,7 +573,7 @@ class GroupCoordinator:
         """Send the input tensor dictionary.
         NOTE: `dst` is the local rank of the source rank.
         """
-        # Bypass the function if we are using only 1 GPU.
+        # Bypass the function if we are using only 1 GPU or dist is not init.
         if not torch.distributed.is_initialized() or self.world_size == 1:
             return tensor_dict
 
@@ -626,7 +626,7 @@ class GroupCoordinator:
         """Recv the input tensor dictionary.
         NOTE: `src` is the local rank of the source rank.
         """
-        # Bypass the function if we are using only 1 GPU.
+        # Bypass the function if we are using only 1 GPU or dist is not init.
         if not torch.distributed.is_initialized() or self.world_size == 1:
             return None
 
@@ -691,6 +691,9 @@ class GroupCoordinator:
         secretly created GPU tensors. It is easy to mess up the current
         device. Use the CPU group instead.
         """
+        # In single-process mode or when dist is not initialized, this is a no-op.
+        if self.world_size == 1 or not torch.distributed.is_initialized():
+            return
         torch.distributed.barrier(group=self.cpu_group)
 
     def send(self, tensor: torch.Tensor, dst: int | None = None) -> None:
@@ -719,6 +722,39 @@ class GroupCoordinator:
             self.mq_broadcaster = None
 
 
+class SingleProcessGroupCoordinator(GroupCoordinator):
+    """Trivial coordinator for single-process (world_size=1) runs.
+
+    This avoids any use of torch.distributed at all. All collectives are
+    effectively no-ops or passthroughs thanks to the world_size==1 checks
+    in GroupCoordinator methods.
+    """
+
+    def __init__(self, local_rank: int = 0):
+        group_name = "world_single"
+        self.unique_name = _get_unique_name(group_name)
+        _register_group(self)
+
+        self.rank = 0
+        self.local_rank = local_rank
+        self.ranks = [0]
+        self.world_size = 1
+        self.rank_in_group = 0
+
+        self.device_group = None
+        self.cpu_group = None
+
+        self.device = get_local_torch_device()
+        self.use_device_communicator = False
+        self.device_communicator = None  # type: ignore
+        self.mq_broadcaster = None
+        self.use_custom_op_call = False
+
+    def barrier(self) -> None:
+        # Single process: nothing to synchronize.
+        return
+
+
 _WORLD: GroupCoordinator | None = None
 _NODE: GroupCoordinator | None = None
 
@@ -730,6 +766,10 @@ def get_world_group() -> GroupCoordinator:
 
 def init_world_group(ranks: list[int], local_rank: int,
                      backend: str) -> GroupCoordinator:
+    # For single-process, non-distributed runs, use a lightweight coordinator
+    # that never touches torch.distributed.
+    if len(ranks) == 1 and not torch.distributed.is_initialized():
+        return SingleProcessGroupCoordinator(local_rank=local_rank)
     return GroupCoordinator(
         group_ranks=[ranks],
         local_rank=local_rank,
@@ -798,6 +838,30 @@ def init_distributed_environment(
         "world_size=%d rank=%d local_rank=%d "
         "distributed_init_method=%s backend=%s", world_size, rank, local_rank,
         distributed_init_method, backend)
+    
+    global _WORLD
+
+    # Special case: single-process mode. Do NOT call torch.distributed.init_process_group.
+    if world_size == 1:
+        # Set the local rank (similar logic as the multi-process path, but
+        # without relying on torch.distributed).
+        if local_rank == -1:
+            if distributed_init_method == "env://":
+                local_rank = envs.LOCAL_RANK
+            else:
+                local_rank = rank
+
+        if _WORLD is None:
+            ranks = list(range(world_size))  # [0]
+            _WORLD = init_world_group(ranks, local_rank, backend)
+        else:
+            assert _WORLD.world_size == 1, (
+                "world group already initialized with a different world size")
+
+        # Nothing else to do for single-process runs.
+        return
+
+    # Multi-process case: we do use torch.distributed.
     if not torch.distributed.is_initialized():
         assert distributed_init_method is not None, (
             "distributed_init_method must be provided when initializing "
@@ -818,7 +882,6 @@ def init_distributed_environment(
             local_rank = envs.LOCAL_RANK
         else:
             local_rank = rank
-    global _WORLD
     if _WORLD is None:
         ranks = list(range(torch.distributed.get_world_size()))
         _WORLD = init_world_group(ranks, local_rank, backend)
@@ -858,6 +921,32 @@ def initialize_model_parallel(
         sequence_model_parallel_size: number of GPUs used for sequence model
             parallelism (used for DiT).
     """
+    # Single-process path: torch.distributed is not initialized.
+    # We still want helper functions like get_tp_world_size() to work, but
+    # there is no real distributed backend to set up.
+    global _WORLD, _TP, _SP, _DP
+
+    if not torch.distributed.is_initialized():
+        assert tensor_model_parallel_size == 1, (
+            "tensor_model_parallel_size must be 1 when torch.distributed is "
+            "not initialized")
+        assert sequence_model_parallel_size == 1, (
+            "sequence_model_parallel_size must be 1 when torch.distributed is "
+            "not initialized")
+
+        if _WORLD is None:
+            # Create a trivial world group if it wasn't created yet.
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            _WORLD = SingleProcessGroupCoordinator(local_rank=local_rank)
+        if _TP is None:
+            _TP = _WORLD
+        if _SP is None:
+            _SP = _WORLD
+        if _DP is None:
+            _DP = _WORLD
+        return
+
+    # Multi-process path (original behavior).
     # Get world size and rank. Ensure some consistencies.
     assert _WORLD is not None, "world group is not initialized, please call init_distributed_environment first"
     world_size: int = get_world_size()
@@ -866,7 +955,7 @@ def initialize_model_parallel(
     assert world_size >= tensor_model_parallel_size, f"world_size({world_size}) must be greater than or equal to tensor_model_parallel_size({tensor_model_parallel_size})"
     num_tensor_model_parallel_groups: int = (world_size //
                                              tensor_model_parallel_size)
-    global _TP
+
     assert _TP is None, ("tensor model parallel group is already initialized")
     group_ranks = []
     for i in range(num_tensor_model_parallel_groups):
@@ -885,7 +974,7 @@ def initialize_model_parallel(
     # Build the sequence model-parallel groups.
     num_sequence_model_parallel_groups: int = (world_size //
                                                sequence_model_parallel_size)
-    global _SP
+
     assert _SP is None, ("sequence model parallel group is already initialized")
     group_ranks = []
 
@@ -904,7 +993,7 @@ def initialize_model_parallel(
 
     # Build the data parallel groups.
     num_data_parallel_groups: int = sequence_model_parallel_size
-    global _DP
+
     assert _DP is None, ("data parallel group is already initialized")
     group_ranks = []
 

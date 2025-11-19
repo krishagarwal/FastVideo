@@ -1,0 +1,1 @@
+kubectl apply -f yaml/vsa_baseline.yaml
